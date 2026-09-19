@@ -300,14 +300,12 @@ export default async function DashboardPage() {
                   </p>
 
                   <div className="mt-8 flex flex-wrap gap-3">
-                    <button
-                      type="button"
-                      disabled
-                      title="Le launcher sera branché ici dès qu'il sera disponible."
-                      className="rounded-xl bg-gradient-to-r from-violet-600 via-fuchsia-600 to-cyan-500 px-7 py-4 font-semibold shadow-[0_0_40px_rgba(124,58,237,0.25)] opacity-70"
-                    >
-                      ↓ Télécharger GameMate pour Windows
-                    </button>
+                    <a
+  href="https://github.com/SkyLex56930/gamemate-releases/releases/latest/download/launcher_x64-setup.exe"
+  className="rounded-xl bg-gradient-to-r from-violet-600 via-fuchsia-600 to-cyan-500 px-7 py-4 font-semibold shadow-[0_0_40px_rgba(124,58,237,0.25)] transition hover:scale-[1.02]"
+>
+  ↓ Télécharger GameMate pour Windows
+</a>
 
                     <div className="flex items-center rounded-xl border border-white/10 bg-white/[0.03] px-5 py-3">
                       <div>
@@ -323,8 +321,8 @@ export default async function DashboardPage() {
                   </div>
 
                   <p className="mt-4 text-xs text-slate-500">
-                    Le bouton sera activé dès que GameMateSetup.exe sera prêt.
-                  </p>
+  Windows 64 bits · GameMate Launcher Alpha 0.1.0
+</p>
                 </div>
 
                 <div className="relative mx-auto w-full max-w-sm">

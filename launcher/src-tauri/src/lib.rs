@@ -8,7 +8,7 @@ use std::process::{Command, Stdio};
 use std::os::windows::process::CommandExt;
 
 const COMPANION_DOWNLOAD_URL: &str =
-    "https://github.com/SkyLex56930/gamemate/releases/latest/download/GameMate.Companion_x64-setup.exe";
+    "https://github.com/SkyLex56930/gamemate-releases/releases/latest/download/GameMate.Companion_x64-setup.exe";
 
 #[cfg(target_os = "windows")]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
