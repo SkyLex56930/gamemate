@@ -1,0 +1,322 @@
+.tsp{
+  grid-column:1/-1;
+  width:100%;
+  margin-top:2px;
+  border:1px solid rgba(43,91,127,.42);
+  border-radius:12px;
+  padding:18px;
+  background:linear-gradient(180deg,#071826,#05131f);
+}
+
+.tsp-head{
+  display:flex;
+  align-items:flex-end;
+  justify-content:space-between;
+  gap:16px;
+  margin-bottom:16px;
+}
+
+.tsp-head h2{
+  margin:5px 0 0;
+  font-size:20px;
+}
+
+.tsp-head p{
+  margin:6px 0 0;
+  color:#8498ad;
+  font-size:11px;
+  line-height:1.5;
+}
+
+.tsp-tabs{
+  display:flex;
+  gap:6px;
+}
+
+.tsp-tabs button{
+  min-height:38px;
+  border:1px solid #193b55;
+  border-radius:8px;
+  padding:0 12px;
+  background:#071a2a;
+  color:#879baf;
+  font-size:10px;
+  font-weight:800;
+}
+
+.tsp-tabs button.active{
+  border-color:#6842ff;
+  background:rgba(104,66,255,.16);
+  color:#e4ddff;
+}
+
+.tsp-ticket-layout{
+  display:grid;
+  grid-template-columns:300px 320px minmax(0,1fr);
+  gap:12px;
+  align-items:stretch;
+}
+
+.tsp-report-layout{
+  display:grid;
+  grid-template-columns:360px minmax(0,1fr);
+  gap:12px;
+}
+
+.tsp-create-card,
+.tsp-list-card,
+.tsp-thread-card,
+.tsp-report-list-card{
+  min-width:0;
+  border:1px solid #14334c;
+  border-radius:10px;
+  padding:14px;
+  background:#04111d;
+}
+
+.tsp h3{
+  margin:0 0 12px;
+  font-size:14px;
+}
+
+.tsp label{
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+  margin-bottom:10px;
+}
+
+.tsp label span{
+  color:#7a8fa4;
+  font-size:10px;
+  font-weight:800;
+}
+
+.tsp input,
+.tsp textarea,
+.tsp select{
+  width:100%;
+  border:1px solid #1a3c56;
+  border-radius:8px;
+  outline:none;
+  padding:10px 11px;
+  background:#061522;
+  color:#eef4fb;
+  font-size:11px;
+}
+
+.tsp input{height:42px}
+.tsp textarea{resize:vertical;line-height:1.5}
+.tsp input:focus,.tsp textarea:focus,.tsp select:focus{border-color:#6842ff}
+
+.tsp-ticket-list,
+.tsp-report-list{
+  display:flex;
+  max-height:470px;
+  flex-direction:column;
+  gap:6px;
+  overflow:auto;
+}
+
+.tsp-ticket-list>button,
+.tsp-report-list>article{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  align-items:center;
+  gap:10px;
+  min-height:58px;
+  border:1px solid #14334c;
+  border-radius:8px;
+  padding:10px;
+  background:#061522;
+  color:#dce6ef;
+  text-align:left;
+}
+
+.tsp-ticket-list>button.active{
+  border-color:rgba(104,66,255,.5);
+  background:rgba(104,66,255,.1);
+}
+
+.tsp-ticket-list strong,
+.tsp-ticket-list span,
+.tsp-report-list strong,
+.tsp-report-list span{display:block}
+.tsp-ticket-list strong,.tsp-report-list strong{font-size:11px}
+.tsp-ticket-list span,.tsp-report-list span{margin-top:4px;color:#778ba0;font-size:9px}
+
+.tsp-ticket-status,
+.tsp-report-status{
+  flex:0 0 auto;
+  border:1px solid #28465e;
+  border-radius:999px;
+  padding:6px 8px;
+  color:#90a3b5;
+  font-size:8px;
+  font-weight:900;
+  text-transform:uppercase;
+  white-space:nowrap;
+}
+
+.tsp-ticket-status.open,
+.tsp-report-status.new{border-color:rgba(85,111,255,.35);color:#a3afff}
+.tsp-ticket-status.in_progress,
+.tsp-report-status.in_progress{border-color:rgba(0,184,255,.34);color:#77d8ff}
+.tsp-ticket-status.waiting_user,
+.tsp-report-status.waiting{border-color:rgba(255,184,70,.34);color:#ffd07c}
+.tsp-ticket-status.resolved,
+.tsp-ticket-status.closed,
+.tsp-report-status.resolved{border-color:rgba(35,195,150,.34);color:#82dec2}
+.tsp-report-status.dismissed{border-color:#314c61;color:#8ba0b4}
+
+.tsp-thread-card{
+  display:flex;
+  min-height:480px;
+  flex-direction:column;
+}
+
+.tsp-thread-card>header{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:10px;
+  padding-bottom:11px;
+  border-bottom:1px solid #123049;
+}
+
+.tsp-thread-card>header small{color:#6e8398;font-size:8px}
+.tsp-thread-card>header h3{margin:4px 0 0}
+
+.tsp-thread{
+  display:flex;
+  flex:1;
+  min-height:0;
+  max-height:360px;
+  flex-direction:column;
+  gap:8px;
+  overflow:auto;
+  margin:10px 0;
+  padding:4px;
+}
+
+.tsp-thread article{
+  max-width:82%;
+  border:1px solid #16344d;
+  border-radius:9px;
+  padding:10px 12px;
+  background:#061522;
+}
+
+.tsp-thread article.user{
+  align-self:flex-end;
+  border-color:rgba(104,66,255,.38);
+  background:rgba(104,66,255,.09);
+}
+
+.tsp-thread article.staff{align-self:flex-start}
+.tsp-thread article small{color:#778ba0;font-size:8px}
+.tsp-thread article p{margin:6px 0;color:#dce6ef;font-size:11px;line-height:1.5}
+.tsp-thread article span{color:#60768b;font-size:8px}
+
+.tsp-reply{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  gap:8px;
+  margin-top:auto;
+  padding-top:10px;
+  border-top:1px solid #123049;
+}
+
+.tsp-reply button{
+  min-width:90px;
+  border:1px solid #6842ff;
+  border-radius:8px;
+  padding:0 13px;
+  background:#4d22c8;
+  color:white;
+  font-size:10px;
+  font-weight:900;
+}
+
+.tsp-reply button:disabled{opacity:.4;cursor:default}
+
+@media(max-width:1180px){
+  .tsp-ticket-layout{grid-template-columns:1fr 1fr}
+  .tsp-thread-card{grid-column:1/-1}
+}
+
+@media(max-width:760px){
+  .tsp-head{align-items:flex-start;flex-direction:column}
+  .tsp-ticket-layout,.tsp-report-layout{grid-template-columns:1fr}
+  .tsp-thread-card{grid-column:auto}
+  .tsp-reply{grid-template-columns:1fr}
+}
+
+
+/* V4 - panneau Support visible et utilisable */
+.tsp{
+  grid-column:auto !important;
+  width:100%;
+  padding:18px;
+}
+
+.tsp-head h2{
+  font-size:22px;
+}
+
+.tsp-head p{
+  font-size:11px;
+}
+
+.tsp-tabs button{
+  min-height:40px;
+  padding:0 14px;
+  font-size:10px;
+}
+
+.tsp-create-card h3,
+.tsp-list-card h3,
+.tsp-thread-card h3,
+.tsp-report-list-card h3{
+  font-size:14px;
+}
+
+.tsp label span{
+  font-size:10px;
+}
+
+.tsp input,
+.tsp textarea,
+.tsp select{
+  min-height:40px;
+  font-size:11px;
+}
+
+.tsp textarea{
+  min-height:100px;
+}
+
+.tsp .tm2-primary{
+  width:100%;
+  min-height:44px;
+  font-size:11px;
+}
+
+.tsp-ticket-list>button,
+.tsp-report-list>article{
+  min-height:58px;
+}
+
+.tsp-ticket-list strong,
+.tsp-report-list strong{
+  font-size:10.5px;
+}
+
+.tsp-ticket-list span,
+.tsp-report-list span{
+  font-size:9px;
+}
+
+.tsp-thread article p{
+  font-size:11px;
+}

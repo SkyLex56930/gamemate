@@ -1,127 +1,17 @@
-import { FormEvent, useEffect, useState } from "react";
-import type { Session } from "@supabase/supabase-js";
+import { useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { supabase } from "./lib/supabase";
 import "./App.css";
-
-type Section = "home" | "news" | "settings";
-
-type Profile = {
-  username: string | null;
-  display_name: string | null;
-  avatar_url: string | null;
-};
 
 const appWindow = getCurrentWindow();
 
+type LauncherState = "ready" | "checking" | "updating";
+
 function App() {
-  const [section, setSection] = useState<Section>("home");
-
-  const [session, setSession] = useState<Session | null>(null);
-  const [profile, setProfile] = useState<Profile | null>(null);
-
-  const [authLoading, setAuthLoading] = useState(true);
-  const [loginLoading, setLoginLoading] = useState(false);
-
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-
-  const [loginError, setLoginError] = useState("");
-  const [showLogin, setShowLogin] = useState(false);
-
-  useEffect(() => {
-    let mounted = true;
-
-    async function initializeAuth() {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
-      if (!mounted) return;
-
-      setSession(session);
-
-      if (session?.user) {
-        await loadProfile(session.user.id);
-      }
-
-      setAuthLoading(false);
-    }
-
-    void initializeAuth();
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, currentSession) => {
-      setSession(currentSession);
-
-      if (currentSession?.user) {
-        await loadProfile(currentSession.user.id);
-      } else {
-        setProfile(null);
-      }
-    });
-
-    return () => {
-      mounted = false;
-      subscription.unsubscribe();
-    };
-  }, []);
-
-  async function loadProfile(userId: string) {
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("username, display_name, avatar_url")
-      .eq("id", userId)
-      .single();
-
-    if (error) {
-      console.error("Erreur profil :", error);
-      return;
-    }
-
-    setProfile(data);
-  }
-
-  async function handleLogin(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    setLoginError("");
-    setLoginLoading(true);
-
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
-      password,
-    });
-
-    if (error) {
-      console.error("Erreur Supabase login :", error);
-
-      setLoginError(`${error.name} : ${error.message}`);
-
-      setLoginLoading(false);
-      return;
-    }
-
-    setSession(data.session);
-
-    if (data.user) {
-      await loadProfile(data.user.id);
-    }
-
-    setPassword("");
-    setShowLogin(false);
-    setLoginLoading(false);
-  }
-
-  async function handleLogout() {
-    await supabase.auth.signOut();
-
-    setSession(null);
-    setProfile(null);
-    setEmail("");
-    setPassword("");
-  }
+  const [launcherState, setLauncherState] =
+    useState<LauncherState>("ready");
+  const [progress, setProgress] = useState(0);
+  const [launchLoading, setLaunchLoading] = useState(false);
 
   async function handleMinimize() {
     try {
@@ -155,13 +45,43 @@ function App() {
     }
   }
 
-  const displayName =
-    profile?.display_name ||
-    profile?.username ||
-    session?.user.email ||
-    "Compte GameMate";
+  async function handleLaunch() {
+    if (launchLoading) return;
 
-  const avatarLetter = displayName.slice(0, 1).toUpperCase();
+    setLaunchLoading(true);
+
+    try {
+      const message = await invoke<string>("launch_companion");
+      console.log(message);
+    } catch (error) {
+      console.error("Erreur lancement Companion :", error);
+
+      alert(
+        typeof error === "string"
+          ? error
+          : "Impossible de lancer le Companion.",
+      );
+    } finally {
+      // On laisse un court délai pour éviter un double-clic immédiat.
+      window.setTimeout(() => {
+        setLaunchLoading(false);
+      }, 1400);
+    }
+  }
+
+  function simulateUpdateCheck() {
+    if (launcherState !== "ready") return;
+
+    setLauncherState("checking");
+    setProgress(12);
+
+    window.setTimeout(() => setProgress(38), 250);
+    window.setTimeout(() => setProgress(72), 520);
+    window.setTimeout(() => {
+      setProgress(100);
+      setLauncherState("ready");
+    }, 850);
+  }
 
   return (
     <div className="launcher-shell">
@@ -197,7 +117,7 @@ function App() {
           >
             <button
               type="button"
-              className="window-button window-minimize"
+              className="window-button"
               onClick={() => void handleMinimize()}
               aria-label="Réduire"
               title="Réduire"
@@ -207,7 +127,7 @@ function App() {
 
             <button
               type="button"
-              className="window-button window-maximize"
+              className="window-button"
               onClick={() => void handleToggleMaximize()}
               aria-label="Agrandir ou restaurer"
               title="Agrandir / Restaurer"
@@ -227,532 +147,169 @@ function App() {
           </div>
         </div>
 
-        <div className="launcher-body">
-          <aside className="sidebar">
-            <div className="brand">
-              <img
-                src="/gamemate-logo.png"
-                alt="GameMate"
-                className="brand-logo"
-              />
+        <main className="launcher-main">
+          <div className="ambient ambient-purple" />
+          <div className="ambient ambient-blue" />
 
-              <div>
-                <div className="brand-name">GameMate</div>
-                <div className="brand-subtitle">Companion</div>
-              </div>
-            </div>
-
-            <nav className="navigation">
-              <button
-                type="button"
-                className={`nav-item ${
-                  section === "home" ? "active" : ""
-                }`}
-                onClick={() => setSection("home")}
-              >
-                <span>⌂</span>
-                Accueil
-              </button>
-
-              <button
-                type="button"
-                className={`nav-item ${
-                  section === "news" ? "active" : ""
-                }`}
-                onClick={() => setSection("news")}
-              >
-                <span>✦</span>
-                Nouveautés
-              </button>
-
-              <button
-                type="button"
-                className={`nav-item ${
-                  section === "settings" ? "active" : ""
-                }`}
-                onClick={() => setSection("settings")}
-              >
-                <span>⚙</span>
-                Paramètres
-              </button>
-            </nav>
-
-            <div className="sidebar-bottom">
-              <div className="service-status">
+          <section className="hero-panel">
+            <div className="hero-copy">
+              <div className="status-pill">
                 <span className="status-dot" />
-
-                <div>
-                  <strong>Services opérationnels</strong>
-                  <span>Tous les systèmes fonctionnent</span>
-                </div>
+                Prêt à jouer
               </div>
 
-              <div className="version">
-                GameMate Launcher • Alpha 0.1.0
-              </div>
-            </div>
-          </aside>
-
-          <main className="main">
-            <header className="topbar">
-              <div>
-                <span className="topbar-label">GAMEMATE</span>
-
-                <strong>
-                  {section === "home" && "Accueil"}
-                  {section === "news" && "Nouveautés"}
-                  {section === "settings" && "Paramètres"}
-                </strong>
-              </div>
-
-              <div className="profile">
-                <div className="profile-avatar">
-                  {authLoading ? (
-                    "…"
-                  ) : session && profile?.avatar_url ? (
-                    <img
-                      src={profile.avatar_url}
-                      alt={displayName}
-                      className="profile-avatar-image"
-                    />
-                  ) : (
-                    avatarLetter
-                  )}
-                </div>
-
-                <div className="profile-info">
-                  <strong>
-                    {authLoading
-                      ? "Chargement..."
-                      : session
-                        ? displayName
-                        : "Compte GameMate"}
-                  </strong>
-
-                  <span>
-                    {authLoading
-                      ? "Vérification de la session"
-                      : session
-                        ? "● Connecté"
-                        : "Non connecté"}
-                  </span>
-                </div>
-
-                {session ? (
-                  <button
-                    type="button"
-                    className="profile-menu"
-                    onClick={() => void handleLogout()}
-                    title="Se déconnecter"
-                  >
-                    ⎋
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    className="profile-menu"
-                    onClick={() => setShowLogin(true)}
-                    title="Se connecter"
-                  >
-                    →
-                  </button>
-                )}
-              </div>
-            </header>
-
-            {section === "home" && (
-              <div className="page">
-                <section className="hero">
-                  <div className="hero-glow hero-glow-purple" />
-                  <div className="hero-glow hero-glow-blue" />
-
-                  <div className="hero-content">
-                    <div className="alpha-badge">
-                      <span />
-                      GameMate Alpha
-                    </div>
-
-                    <h1>
-                      Ton univers gaming.
-                      <span>Tes prochains mates.</span>
-                    </h1>
-
-                    <p>
-                      GameMate rassemble tes joueurs, tes squads et tes
-                      communautés directement sur ton PC.
-                    </p>
-
-                    <div className="hero-actions">
-                      <button
-                        type="button"
-                        className="primary-button"
-                        onClick={() =>
-                          alert("Le Companion GameMate sera lancé ici.")
-                        }
-                      >
-                        <span>▶</span>
-                        Lancer GameMate
-                      </button>
-
-                      <div className="update-state">
-                        <span className="check">✓</span>
-
-                        <div>
-                          <strong>Tu es à jour</strong>
-                          <span>Version Alpha 0.1.0</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="hero-logo-wrap">
-                    <div className="logo-aura" />
-
-                    <img
-                      src="/gamemate-logo.png"
-                      alt=""
-                      className="hero-logo"
-                    />
-                  </div>
-                </section>
-
-                <section className="dashboard-grid">
-                  <div className="card account-card">
-                    <div className="card-header">
-                      <div>
-                        <span className="eyebrow">TON COMPTE</span>
-
-                        <h2>
-                          {session
-                            ? `Bienvenue ${displayName}`
-                            : "Connecte-toi à GameMate"}
-                        </h2>
-                      </div>
-
-                      <span className="card-icon">◎</span>
-                    </div>
-
-                    {session ? (
-                      <>
-                        <p>
-                          Ton compte GameMate est connecté. Ton profil est
-                          chargé automatiquement et ta session restera
-                          active lors du prochain lancement.
-                        </p>
-
-                        <div className="account-actions">
-                          <button
-                            type="button"
-                            className="secondary-button"
-                          >
-                            Voir mon profil
-                          </button>
-
-                          <button
-                            type="button"
-                            className="secondary-button"
-                            onClick={() => void handleLogout()}
-                          >
-                            Se déconnecter
-                          </button>
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <p>
-                          Utilise le même compte que sur le portail
-                          GameMate pour retrouver ton profil, tes jeux et
-                          ton Gaming DNA.
-                        </p>
-
-                        <button
-                          type="button"
-                          className="secondary-button"
-                          onClick={() => setShowLogin(true)}
-                        >
-                          Se connecter
-                        </button>
-                      </>
-                    )}
-                  </div>
-
-                  <div className="card status-card">
-                    <div className="card-header">
-                      <div>
-                        <span className="eyebrow">ÉTAT</span>
-                        <h2>Services GameMate</h2>
-                      </div>
-
-                      <span className="status-big">●</span>
-                    </div>
-
-                    <div className="services">
-                      <div>
-                        <span>Authentification</span>
-                        <strong className="online">Opérationnel</strong>
-                      </div>
-
-                      <div>
-                        <span>Profils</span>
-                        <strong className="online">Opérationnel</strong>
-                      </div>
-
-                      <div>
-                        <span>Companion</span>
-                        <strong className="development">
-                          En développement
-                        </strong>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="card news-card">
-                    <span className="eyebrow">
-                      DERNIÈRES NOUVEAUTÉS
-                    </span>
-
-                    <h2>GameMate prend vie.</h2>
-
-                    <p>
-                      Le portail web est opérationnel et le développement
-                      du Companion Windows continue.
-                    </p>
-
-                    <button
-                      type="button"
-                      className="text-button"
-                      onClick={() => setSection("news")}
-                    >
-                      Voir les nouveautés →
-                    </button>
-                  </div>
-
-                  <div className="card coming-card">
-                    <span className="eyebrow">BIENTÔT</span>
-
-                    <h2>Le vrai GameMate arrive ici.</h2>
-
-                    <div className="feature-list">
-                      <span>
-                        <i>✓</i> Trouver des mates
-                      </span>
-
-                      <span>
-                        <i>✓</i> Squads & Teams
-                      </span>
-
-                      <span>
-                        <i>✓</i> Messages
-                      </span>
-
-                      <span>
-                        <i>✓</i> Overlay en jeu
-                      </span>
-                    </div>
-                  </div>
-                </section>
-              </div>
-            )}
-
-            {section === "news" && (
-              <div className="page">
-                <div className="section-heading">
-                  <span className="eyebrow">GAMEMATE NEWS</span>
-
-                  <h1>Nouveautés</h1>
-
-                  <p>Suis l&apos;évolution de GameMate.</p>
-                </div>
-
-                <div className="news-list">
-                  <article className="news-item">
-                    <div className="news-date">
-                      SEPT.
-                      <strong>16</strong>
-                      2026
-                    </div>
-
-                    <div>
-                      <span className="news-tag">COMPANION</span>
-
-                      <h2>Développement du Companion</h2>
-
-                      <p>
-                        Le Companion GameMate dispose maintenant de sa
-                        première interface et de son profil connecté.
-                      </p>
-                    </div>
-                  </article>
-
-                  <article className="news-item">
-                    <div className="news-date">
-                      SEPT.
-                      <strong>16</strong>
-                      2026
-                    </div>
-
-                    <div>
-                      <span className="news-tag">AUTH</span>
-
-                      <h2>Connexion Supabase</h2>
-
-                      <p>
-                        Le même compte GameMate fonctionne maintenant dans
-                        le launcher Windows.
-                      </p>
-                    </div>
-                  </article>
-                </div>
-              </div>
-            )}
-
-            {section === "settings" && (
-              <div className="page">
-                <div className="section-heading">
-                  <span className="eyebrow">LAUNCHER</span>
-
-                  <h1>Paramètres</h1>
-
-                  <p>
-                    Personnalise le comportement du GameMate Launcher.
-                  </p>
-                </div>
-
-                <div className="settings-list">
-                  <div className="setting-row">
-                    <div>
-                      <strong>Lancer au démarrage de Windows</strong>
-
-                      <span>
-                        Démarrer automatiquement le launcher avec ton PC.
-                      </span>
-                    </div>
-
-                    <button type="button" className="toggle">
-                      <span />
-                    </button>
-                  </div>
-
-                  <div className="setting-row">
-                    <div>
-                      <strong>Mises à jour automatiques</strong>
-
-                      <span>
-                        Installer automatiquement les nouvelles versions.
-                      </span>
-                    </div>
-
-                    <button type="button" className="toggle enabled">
-                      <span />
-                    </button>
-                  </div>
-
-                  <div className="setting-row">
-                    <div>
-                      <strong>
-                        Réduire dans la zone de notification
-                      </strong>
-
-                      <span>
-                        Garder GameMate actif en arrière-plan.
-                      </span>
-                    </div>
-
-                    <button type="button" className="toggle enabled">
-                      <span />
-                    </button>
-                  </div>
-
-                  {session && (
-                    <div className="setting-row">
-                      <div>
-                        <strong>Compte GameMate</strong>
-                        <span>{session.user.email}</span>
-                      </div>
-
-                      <button
-                        type="button"
-                        className="secondary-button compact-button"
-                        onClick={() => void handleLogout()}
-                      >
-                        Déconnexion
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-          </main>
-        </div>
-
-        {showLogin && !session && (
-          <div className="login-overlay">
-            <div className="login-modal">
-              <button
-                type="button"
-                className="login-close"
-                onClick={() => setShowLogin(false)}
-              >
-                ×
-              </button>
-
-              <img
-                src="/gamemate-logo.png"
-                alt="GameMate"
-                className="login-logo"
-              />
-
-              <span className="eyebrow">COMPTE GAMEMATE</span>
-
-              <h2>Connexion</h2>
-
-              <p>
-                Connecte-toi avec le même compte que sur le portail
-                GameMate.
+              <p className="eyebrow">GAMEMATE COMPANION</p>
+
+              <h1>
+                Tout est prêt.
+                <span>Lance GameMate.</span>
+              </h1>
+
+              <p className="hero-description">
+                Le launcher s&apos;occupe uniquement de vérifier ta version,
+                mettre GameMate à jour et lancer le Companion.
               </p>
 
-              <form onSubmit={handleLogin} className="login-form">
-                <label>
-                  Adresse email
-
-                  <input
-                    type="email"
-                    required
-                    value={email}
-                    onChange={(event) => setEmail(event.target.value)}
-                    placeholder="ton@email.com"
-                    autoComplete="email"
-                  />
-                </label>
-
-                <label>
-                  Mot de passe
-
-                  <input
-                    type="password"
-                    required
-                    value={password}
-                    onChange={(event) => setPassword(event.target.value)}
-                    placeholder="••••••••"
-                    autoComplete="current-password"
-                  />
-                </label>
-
-                {loginError && (
-                  <div className="login-error">{loginError}</div>
-                )}
+              <div className="hero-actions">
+                <button
+                  type="button"
+                  className="launch-button"
+                  onClick={() => void handleLaunch()}
+                  disabled={
+                    launcherState !== "ready" || launchLoading
+                  }
+                >
+                  <span className="play-icon">▶</span>
+                  {launchLoading
+                    ? "Lancement..."
+                    : "Lancer GameMate"}
+                </button>
 
                 <button
-                  type="submit"
-                  className="primary-button login-submit"
-                  disabled={loginLoading}
+                  type="button"
+                  className="check-button"
+                  onClick={simulateUpdateCheck}
+                  disabled={
+                    launcherState !== "ready" || launchLoading
+                  }
                 >
-                  {loginLoading ? "Connexion..." : "Se connecter"}
+                  Vérifier les mises à jour
                 </button>
-              </form>
+              </div>
+
+              <div className="version-row">
+                <div>
+                  <span>VERSION INSTALLÉE</span>
+                  <strong>Alpha 0.1.0</strong>
+                </div>
+
+                <div>
+                  <span>DERNIÈRE VERSION</span>
+                  <strong>Alpha 0.1.0</strong>
+                </div>
+
+                <div>
+                  <span>ÉTAT</span>
+                  <strong className="online">À jour</strong>
+                </div>
+              </div>
             </div>
-          </div>
-        )}
+
+            <div className="hero-visual">
+              <div className="logo-ring logo-ring-one" />
+              <div className="logo-ring logo-ring-two" />
+              <div className="logo-aura" />
+
+              <img
+                src="/gamemate-logo.png"
+                alt="Logo GameMate"
+                className="hero-logo"
+              />
+            </div>
+          </section>
+
+          <section className="bottom-grid">
+            <article className="update-card">
+              <div className="card-heading">
+                <div>
+                  <span className="eyebrow">
+                    DERNIÈRE MISE À JOUR
+                  </span>
+                  <h2>GameMate Alpha 0.1.0</h2>
+                </div>
+
+                <span className="date-badge">
+                  17 SEPT. 2026
+                </span>
+              </div>
+
+              <p>
+                Nouvelle base du Launcher, Companion en
+                développement actif et amélioration générale de
+                l&apos;expérience GameMate.
+              </p>
+
+              <ul>
+                <li>Launcher simplifié</li>
+                <li>Accès direct au Companion</li>
+                <li>
+                  Préparation du système de mise à jour
+                </li>
+              </ul>
+            </article>
+
+            <article className="status-card">
+              <span className="eyebrow">INSTALLATION</span>
+
+              <div className="install-state">
+                <div className="install-icon">✓</div>
+
+                <div>
+                  <strong>
+                    {launcherState === "checking"
+                      ? "Vérification en cours..."
+                      : launcherState === "updating"
+                        ? "Mise à jour en cours..."
+                        : "GameMate est à jour"}
+                  </strong>
+                  <span>
+                    {launcherState === "ready"
+                      ? "Aucune mise à jour nécessaire."
+                      : "Patiente quelques secondes."}
+                  </span>
+                </div>
+              </div>
+
+              <div className="progress-track">
+                <div
+                  className="progress-fill"
+                  style={{
+                    width:
+                      launcherState === "ready" &&
+                      progress === 0
+                        ? "100%"
+                        : `${progress}%`,
+                  }}
+                />
+              </div>
+
+              <div className="progress-meta">
+                <span>GameMate Companion</span>
+                <span>
+                  {launcherState === "ready"
+                    ? "Prêt"
+                    : `${Math.max(progress, 1)}%`}
+                </span>
+              </div>
+            </article>
+          </section>
+        </main>
+
+        <footer className="launcher-footer">
+          <span>GameMate Launcher · Alpha</span>
+          <span className="footer-dot">•</span>
+          <span>Windows</span>
+        </footer>
       </div>
     </div>
   );

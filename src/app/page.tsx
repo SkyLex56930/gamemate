@@ -1,216 +1,234 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
+import { useEffect, useRef } from "react";
 import styles from "./page.module.css";
 
 const features = [
-  ["◎", "Trouve les bons mates", "Filtre par jeu, plateforme, micro, crossplay et style de jeu."],
-  ["⚡", "Play Now", "Lance une recherche rapide et rejoins une session sans perdre de temps."],
-  ["◇", "Squads", "Garde tes meilleurs mates sous la main et relance facilement une équipe."],
-  ["✦", "Gaming DNA", "Présente ton style de jeu, tes habitudes et tes préférences."]
+  {
+    icon: "◉",
+    title: "Trouver des mates",
+    text: "Choisis ton jeu et trouve des joueurs qui correspondent à ton style, ton niveau et tes envies.",
+  },
+  {
+    icon: "⚡",
+    title: "Play Now",
+    text: "Quand tu veux jouer tout de suite, lance une recherche et forme rapidement une équipe.",
+  },
+  {
+    icon: "◆",
+    title: "Squads",
+    text: "Crée ton groupe, retrouve tes mates et rejoue facilement avec les bonnes personnes.",
+  },
+  {
+    icon: "✦",
+    title: "Gaming DNA",
+    text: "Ton profil de joueur aide GameMate à te proposer des personnes vraiment compatibles.",
+  },
 ];
 
-const steps = [
-  ["01", "Télécharge GameMate", "Le site reste public : pas besoin de compte pour télécharger l'application."],
-  ["02", "Crée ton profil", "Ajoute tes jeux, ta plateforme, ton style et tes disponibilités."],
-  ["03", "Trouve ta squad", "Utilise Play Now ou la recherche avancée pour trouver les bons joueurs."]
-];
+function clamp(value: number, min = 0, max = 1) {
+  return Math.min(Math.max(value, min), max);
+}
 
 export default function HomePage() {
-  const goDownload = () =>
-    document.getElementById("download")?.scrollIntoView({ behavior: "smooth" });
+  const cinematicRef = useRef<HTMLElement | null>(null);
+  const stickyRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    let raf = 0;
+
+    const update = () => {
+      raf = 0;
+
+      const section = cinematicRef.current;
+      const sticky = stickyRef.current;
+      if (!section || !sticky) return;
+
+      const rect = section.getBoundingClientRect();
+      const scrollable = section.offsetHeight - window.innerHeight;
+      if (scrollable <= 0) return;
+
+      const progress = clamp(-rect.top / scrollable);
+
+      // Transition plus courte : l'essentiel du switch se fait entre 18% et 52%.
+      const heroOpacity = 1 - clamp((progress - 0.14) / 0.22);
+      const secondOpacity = clamp((progress - 0.20) / 0.22);
+      const secondContentOpacity = clamp((progress - 0.34) / 0.18);
+
+      sticky.style.setProperty("--hero-opacity", String(heroOpacity));
+      sticky.style.setProperty("--second-opacity", String(secondOpacity));
+      sticky.style.setProperty(
+        "--second-content-opacity",
+        String(secondContentOpacity),
+      );
+      sticky.style.setProperty("--hero-scale", String(1 + progress * 0.045));
+      sticky.style.setProperty("--second-scale", String(1.045 - progress * 0.025));
+      sticky.style.setProperty("--progress", String(progress));
+    };
+
+    const schedule = () => {
+      if (raf) return;
+      raf = requestAnimationFrame(update);
+    };
+
+    update();
+    window.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", schedule);
+
+    return () => {
+      if (raf) cancelAnimationFrame(raf);
+      window.removeEventListener("scroll", schedule);
+      window.removeEventListener("resize", schedule);
+    };
+  }, []);
 
   return (
     <main className={styles.page}>
-      <header className={styles.header}>
+      <header className={styles.navbar}>
         <Link href="/" className={styles.brand}>
-          <Image src="/gamemate-logo.png" alt="GameMate" width={42} height={42} priority />
-          <span>GameMate</span>
+          <span className={styles.brandMark}>GM</span>
+          <span>
+            Game<span>Mate</span>
+          </span>
         </Link>
 
-        <nav className={styles.nav}>
-          <a href="#how">Comment ça marche</a>
+        <nav className={styles.navLinks} aria-label="Navigation principale">
+          <a href="#discover">Découvrir</a>
           <a href="#features">Fonctionnalités</a>
           <a href="#download">Télécharger</a>
-          <a href="#faq">FAQ</a>
         </nav>
 
-        <div className={styles.actions}>
-          <Link href="/login" className={styles.login}>Connexion</Link>
-          <button onClick={goDownload} className={styles.smallCta}>Télécharger</button>
+        <div className={styles.navActions}>
+          <Link href="/login" className={styles.login}>
+            Se connecter
+          </Link>
+          <Link href="/signup" className={styles.signup}>
+            Créer un compte
+          </Link>
         </div>
       </header>
 
-      <section className={styles.hero}>
-        <div className={styles.heroCopy}>
-          <div className={styles.eyebrow}><span />Le réseau pensé pour jouer ensemble</div>
-          <h1>Trouve tes mates.<em>Lance tes games.</em></h1>
-          <p>
-            GameMate t'aide à trouver rapidement des joueurs selon ton jeu,
-            ta plateforme, ton style et tes disponibilités.
-          </p>
+      <section ref={cinematicRef} className={styles.cinematic}>
+        <div ref={stickyRef} className={styles.cinematicSticky}>
+          <div className={styles.heroLayer} />
+          <div className={styles.heroShade} />
 
-          <div className={styles.heroActions}>
-            <button onClick={goDownload} className={styles.primary}>
-              Télécharger GameMate <b>↘</b>
-            </button>
-            <a href="#how" className={styles.secondary}>Découvrir GameMate</a>
+          <div className={styles.secondLayer} />
+          <div className={styles.secondShade} />
+
+          <div className={styles.transitionFlash} />
+
+          <div className={styles.heroContent}>
+            <p className={styles.eyebrow}>PLAY · CONNECT · BELONG</p>
+            <h1>
+              Trouve tes prochains <span>mates.</span>
+            </h1>
+            <p className={styles.heroText}>
+              Trouve des joueurs qui jouent comme toi, quand tu veux jouer.
+              Découvre GameMate librement, puis télécharge le launcher quand tu
+              veux passer à l&apos;action.
+            </p>
+
+            <div className={styles.heroButtons}>
+              <a href="#download" className={styles.primaryButton}>
+                Télécharger GameMate
+              </a>
+              <a href="#discover" className={styles.secondaryButton}>
+                Découvrir
+              </a>
+            </div>
           </div>
 
-          <div className={styles.stats}>
-            <div><strong>Gratuit</strong><span>pour commencer</span></div>
-            <div><strong>Windows</strong><span>disponible en premier</span></div>
-            <div><strong>Crossplay</strong><span>pensé multi-plateforme</span></div>
+          <div id="discover" className={styles.discoveryContent}>
+            <p className={styles.eyebrow}>GAMEMATE</p>
+            <h2>
+              Marre de <span>jouer seul ?</span>
+            </h2>
+            <p>
+              GameMate te met en relation avec des joueurs qui correspondent
+              vraiment à ton jeu, ton niveau, tes horaires et ta manière de
+              jouer.
+            </p>
+          </div>
+
+          <div className={styles.progressRail} aria-hidden="true">
+            <span />
           </div>
         </div>
+      </section>
 
-        <div className={styles.heroVisual}>
-          <div className={styles.aura} />
-          <div className={styles.appMock}>
-            <div className={styles.mockTop}>
-              <div><Image src="/gamemate-logo.png" alt="" width={26} height={26} /><b>GameMate</b></div>
-              <span>•••</span>
-            </div>
-            <div className={styles.mockBody}>
-              <aside>
-                <b>Accueil</b>
-                <span>Play Now</span>
-                <span>Trouver des mates</span>
-                <span>Squads</span>
-                <span>Messages</span>
-              </aside>
-              <div className={styles.mockContent}>
-                <small>PLAY NOW</small>
-                <h3>Trouve ta prochaine squad</h3>
-                {[
-                  ["N", "Nox", "VALORANT • PC", "96%"],
-                  ["M", "Maya", "Fortnite • Crossplay", "91%"],
-                  ["K", "Kiro", "Warzone • Vocal", "88%"]
-                ].map(([letter, name, meta, score]) => (
-                  <div className={styles.mate} key={name}>
-                    <i>{letter}</i>
-                    <div><b>{name}</b><span>{meta}</span></div>
-                    <strong>{score}</strong>
-                  </div>
-                ))}
-                <button>Trouver mes mates</button>
+      <section id="features" className={styles.featuresSection}>
+        <div className={styles.featuresIntro}>
+          <p className={styles.eyebrow}>COMMENT ÇA MARCHE</p>
+          <h2>
+            Tout ce qu&apos;il faut pour <span>trouver ta team.</span>
+          </h2>
+          <p>
+            Trouve des joueurs compatibles, lance une recherche immédiate,
+            crée tes squads et retrouve les personnes avec qui tu veux rejouer.
+          </p>
+        </div>
+
+        <div className={styles.featureGrid}>
+          {features.map((feature, index) => (
+            <article key={feature.title} className={styles.featureCard}>
+              <div className={styles.featureTopline}>
+                <span className={styles.featureNumber}>0{index + 1}</span>
+                <span className={styles.featureIcon}>{feature.icon}</span>
               </div>
-            </div>
-          </div>
-          <div className={`${styles.floatCard} ${styles.floatOne}`}>⚡ <span><b>Match trouvé</b><small>3 joueurs compatibles</small></span></div>
-          <div className={`${styles.floatCard} ${styles.floatTwo}`}>◉ <span><b>Squad prête</b><small>Micro + crossplay</small></span></div>
-        </div>
-      </section>
-
-      <div className={styles.games}>
-        <span>VALORANT</span><span>FORTNITE</span><span>WARZONE</span>
-        <span>ROCKET LEAGUE</span><span>MINECRAFT</span><span>+ TES JEUX</span>
-      </div>
-
-      <section className={styles.section} id="how">
-        <div className={styles.heading}>
-          <span>COMMENT ÇA MARCHE</span>
-          <h2>Moins de recherche. Plus de parties.</h2>
-          <p>Du moment où tu veux jouer jusqu'à une vraie squad, GameMate doit rester simple et rapide.</p>
-        </div>
-        <div className={styles.steps}>
-          {steps.map(([n, title, text]) => (
-            <article key={n}>
-              <span>{n}</span><h3>{title}</h3><p>{text}</p>
+              <h3>{feature.title}</h3>
+              <p>{feature.text}</p>
             </article>
           ))}
         </div>
       </section>
 
-      <section className={styles.section} id="features">
-        <div className={styles.heading}>
-          <span>TOUT AU MÊME ENDROIT</span>
-          <h2>Une expérience pensée autour de tes parties.</h2>
-        </div>
-        <div className={styles.features}>
-          {features.map(([icon, title, text]) => (
-            <article key={title}>
-              <i>{icon}</i><h3>{title}</h3><p>{text}</p>
-            </article>
-          ))}
-        </div>
-      </section>
-
-      <section className={styles.story}>
-        <div>
-          <span>FAIT POUR LES JOUEURS</span>
-          <h2>Pas besoin de fouiller partout pour trouver avec qui jouer.</h2>
+      <section id="download" className={styles.downloadSection}>
+        <div className={styles.downloadGlow} />
+        <div className={styles.downloadInner}>
+          <p className={styles.eyebrow}>GAME ON</p>
+          <h2>
+            Prêt à trouver <span>ta team ?</span>
+          </h2>
           <p>
-            GameMate rassemble la recherche de joueurs, les squads,
-            les préférences et les sessions rapides dans une seule expérience.
+            Télécharge le launcher sans inscription obligatoire. Tu pourras te
+            connecter ou créer ton compte quand tu lanceras réellement
+            GameMate.
+          </p>
+
+          <div className={styles.downloadActions}>
+            <button className={styles.primaryButton} type="button">
+              Télécharger pour Windows
+            </button>
+            <Link href="/signup" className={styles.secondaryButton}>
+              Créer un compte
+            </Link>
+          </div>
+
+          <p className={styles.downloadNote}>
+            Le bouton sera relié au vrai installateur du Launcher dès qu&apos;il
+            sera prêt.
           </p>
         </div>
-        <div className={styles.quotes}>
-          <blockquote>“Je lance, je choisis mon jeu et je trouve directement des gens qui veulent jouer comme moi.”<footer>Nox • FPS / PC</footer></blockquote>
-          <blockquote>“Plus besoin de fouiller dix serveurs pour trouver une équipe.”<footer>Maya • Crossplay</footer></blockquote>
-          <blockquote>“Je retrouve vite les joueurs avec qui j'ai envie de rejouer.”<footer>Kiro • Compétitif</footer></blockquote>
-        </div>
-      </section>
-
-      <section className={styles.download} id="download">
-        <div className={styles.headingCenter}>
-          <span>TÉLÉCHARGER GAMEMATE</span>
-          <h2>Ta prochaine squad est à quelques clics.</h2>
-          <p>Télécharge GameMate sans inscription obligatoire.</p>
-        </div>
-
-        <div className={styles.platforms}>
-          <article className={styles.mainPlatform}>
-            <div><b>⊞</b><span>Disponible</span></div>
-            <h3>Windows</h3>
-            <p>Launcher GameMate + Companion.</p>
-            <button>Télécharger pour Windows</button>
-            <small>Windows 10 / 11</small>
-          </article>
-
-          <article>
-            <div><b>◈</b><span>Bientôt</span></div>
-            <h3>Android</h3>
-            <p>Retrouve tes mates et tes messages depuis ton téléphone.</p>
-            <button disabled>Bientôt disponible</button>
-          </article>
-
-          <article>
-            <div><b>●</b><span>À venir</span></div>
-            <h3>iOS</h3>
-            <p>L'expérience GameMate arrivera également sur iPhone.</p>
-            <button disabled>À venir</button>
-          </article>
-        </div>
-      </section>
-
-      <section className={styles.faq} id="faq">
-        <div className={styles.heading}>
-          <span>FAQ</span><h2>Les réponses rapides.</h2>
-        </div>
-        <details><summary>Est-ce que GameMate est gratuit ?</summary><p>Oui. Les fonctions essentielles pour trouver des joueurs et jouer ensemble restent au cœur de l'expérience gratuite.</p></details>
-        <details><summary>Faut-il créer un compte avant de télécharger ?</summary><p>Non. Le site est public et le téléchargement n'impose pas d'inscription.</p></details>
-        <details><summary>GameMate prend-il en compte le crossplay ?</summary><p>Oui, la plateforme et les préférences crossplay peuvent être utilisées dans la recherche.</p></details>
-      </section>
-
-      <section className={styles.finalCta}>
-        <div><span>PRÊT À JOUER ?</span><h2>Arrête de chercher. Commence à jouer.</h2></div>
-        <button onClick={goDownload} className={styles.primary}>Télécharger GameMate <b>↘</b></button>
       </section>
 
       <footer className={styles.footer}>
         <div className={styles.footerBrand}>
-          <Image src="/gamemate-logo.png" alt="GameMate" width={36} height={36} />
-          <span><b>GameMate</b><small>Trouve tes prochains mates.</small></span>
+          <span className={styles.brandMark}>GM</span>
+          <strong>
+            Game<span>Mate</span>
+          </strong>
         </div>
-        <div>
-          <a href="#features">Fonctionnalités</a>
-          <a href="#download">Télécharger</a>
+
+        <div className={styles.footerLinks}>
           <Link href="/login">Connexion</Link>
           <Link href="/signup">Créer un compte</Link>
+          <a href="#features">Fonctionnalités</a>
+          <a href="#download">Télécharger</a>
         </div>
-        <small>© {new Date().getFullYear()} GameMate</small>
+
+        <p>Good players. Better people.</p>
       </footer>
     </main>
   );

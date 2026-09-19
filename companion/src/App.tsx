@@ -1,54 +1,81 @@
 import FindMatesScreen from "./pages/FindMatesPage";
-import {
-  FormEvent,
-  useEffect,
-  useState,
-  type ReactNode,
-} from "react";
+import { FormEvent, useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-
 
 import { supabase } from "./lib/supabase";
 import PlayNowScreen from "./pages/PlayNowPage";
 import PublicProfilePage from "./pages/PublicProfilePage";
+import ProfilePage from "./pages/ProfilePage";
+import SquadsPage from "./pages/SquadsPage";
+import FriendsPage from "./pages/FriendsPage";
+import MessagesPage from "./pages/MessagesPage";
+import TestModePage from "./pages/TestModePage";
+import SettingsPage from "./pages/SettingsPage";
+import SupportPage from "./pages/SupportPage";
+import NotificationCenter from "./components/NotificationCenter";
 
 import "./App.css";
 
-type Section =
-  | "home"
-  | "play"
-  | "mates"
-  | "squads"
-  | "messages"
-  | "communities"
-  | "profile"
-  | "settings";
+type Section = "home" | "play" | "mates" | "squads" | "friends" | "messages" | "profile" | "support" | "settings" | "test";
+type UiScale = "compact" | "normal" | "large" | "xlarge";
+type PerfPreset = "eco" | "balanced" | "high" | "ultra" | "custom";
+type NavigationMode = "full" | "compact";
 
-type UiScale =
-  | "compact"
-  | "normal"
-  | "large"
-  | "xlarge";
+type PresenceStatus = "online" | "busy" | "offline";
+
+type ModerationSanctionType = "warning" | "mute" | "suspension" | "ban";
+
+type ModerationSanction = {
+  id: number;
+  type: ModerationSanctionType;
+  reason: string;
+  starts_at: string;
+  ends_at: string | null;
+};
+
+type ModerationState = {
+  restricted: boolean;
+  muted: boolean;
+  top_sanction: ModerationSanction | null;
+  active_sanctions: ModerationSanction[];
+};
+
+const EMPTY_MODERATION_STATE: ModerationState = {
+  restricted: false,
+  muted: false,
+  top_sanction: null,
+  active_sanctions: [],
+};
+
+function formatSanctionDate(value: string | null) {
+  if (!value) return null;
+  return new Date(value).toLocaleString("fr-FR", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+}
+
+
+function readPresenceStatus(): PresenceStatus {
+  const saved = localStorage.getItem("gamemate-presence-status");
+  return saved === "busy" || saved === "offline" ? saved : "online";
+}
 
 type Profile = {
   username: string | null;
   display_name: string | null;
   avatar_url: string | null;
+  banner_url: string | null;
+  equipped_frame_id: string | null;
+  equipped_banner_cosmetic_id: string | null;
   bio: string | null;
   region: string | null;
   language: string | null;
 };
 
-type Game = {
-  id: string;
-  name: string;
-};
-
-type Platform = {
-  id: string;
-  name: string;
-};
+type Game = { id: string; name: string };
+type Platform = { id: string; name: string };
 
 type UserGameRow = {
   game_id: string;
@@ -66,146 +93,107 @@ type UserGame = UserGameRow & {
   platformName: string | null;
 };
 
-type GamingDnaTag = {
-  id: string;
-  name: string;
-  category: string;
-};
+type GamingDnaTag = { id: string; name: string; category: string };
+type AvailabilityRow = { day_of_week: number; start_time: string; end_time: string; timezone: string };
+type LookingForOption = { id: string; label: string; slug: string };
 
-type AvailabilityRow = {
-  day_of_week: number;
-  start_time: string;
-  end_time: string;
-  timezone: string;
-};
-
-type LookingForOption = {
-  id: string;
-  label: string;
-  slug: string;
+type PerformanceSettings = {
+  preset: PerfPreset;
+  glow: number;
+  blur: number;
+  particles: number;
+  motion: number;
+  reduceWhenInactive: boolean;
 };
 
 const appWindow = getCurrentWindow();
+const dayNames = ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"];
 
-const dayNames = [
-  "Dimanche",
-  "Lundi",
-  "Mardi",
-  "Mercredi",
-  "Jeudi",
-  "Vendredi",
-  "Samedi",
-];
+const DEFAULT_PERFORMANCE: PerformanceSettings = {
+  preset: "high",
+  glow: 82,
+  blur: 72,
+  particles: 68,
+  motion: 80,
+  reduceWhenInactive: true,
+};
+
+function readUiScale(): UiScale {
+  const saved = localStorage.getItem("gamemate-ui-scale");
+  return saved === "compact" || saved === "normal" || saved === "large" || saved === "xlarge" ? saved : "large";
+}
+
+
+function readStartupSection(): Section {
+  const saved = localStorage.getItem("gamemate-startup-section");
+  return saved === "play" || saved === "friends" || saved === "messages" ? saved : "home";
+}
+
+function readNavigationMode(): NavigationMode {
+  return localStorage.getItem("gamemate-navigation-mode") === "compact" ? "compact" : "full";
+}
+
+function readNotificationBadges() {
+  return localStorage.getItem("gamemate-notification-badges-enabled") !== "false";
+}
+
+function readPerformanceSettings(): PerformanceSettings {
+  try {
+    const raw = localStorage.getItem("gamemate-performance-settings");
+    if (!raw) return DEFAULT_PERFORMANCE;
+    const parsed = JSON.parse(raw) as Partial<PerformanceSettings>;
+    return { ...DEFAULT_PERFORMANCE, ...parsed };
+  } catch {
+    return DEFAULT_PERFORMANCE;
+  }
+}
 
 function App() {
-  const [section, setSection] =
-    useState<Section>("home");
-
-  const [session, setSession] =
-    useState<Session | null>(null);
-
-  const [profile, setProfile] =
-    useState<Profile | null>(null);
-
-  const [userGames, setUserGames] =
-    useState<UserGame[]>([]);
-
-  const [gamingDna, setGamingDna] =
-    useState<GamingDnaTag[]>([]);
-
-  const [availability, setAvailability] =
-    useState<AvailabilityRow[]>([]);
-
-  const [lookingFor, setLookingFor] =
-    useState<LookingForOption[]>([]);
-
-  const [authLoading, setAuthLoading] =
-    useState(true);
-
-  const [profileLoading, setProfileLoading] =
-    useState(false);
-
-  const [showLogin, setShowLogin] =
-    useState(false);
-
-  const [publicProfileUserId, setPublicProfileUserId] =
-    useState<string | null>(null);
-
-  const [email, setEmail] =
-    useState("");
-
-  const [password, setPassword] =
-    useState("");
-
-  const [loginLoading, setLoginLoading] =
-    useState(false);
-
-  const [loginError, setLoginError] =
-    useState("");
-
-  const [uiScale, setUiScale] =
-    useState<UiScale>(() => {
-      const saved =
-        localStorage.getItem(
-          "gamemate-ui-scale"
-        );
-
-      if (
-        saved === "compact" ||
-        saved === "normal" ||
-        saved === "large" ||
-        saved === "xlarge"
-      ) {
-        return saved;
-      }
-
-      return "large";
-    });
+  const [section, setSection] = useState<Section>(readStartupSection);
+  const [session, setSession] = useState<Session | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [userGames, setUserGames] = useState<UserGame[]>([]);
+  const [gamingDna, setGamingDna] = useState<GamingDnaTag[]>([]);
+  const [availability, setAvailability] = useState<AvailabilityRow[]>([]);
+  const [lookingFor, setLookingFor] = useState<LookingForOption[]>([]);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [showLogin, setShowLogin] = useState(false);
+  const [publicProfileUserId, setPublicProfileUserId] = useState<string | null>(null);
+  const [pendingFriendRequests, setPendingFriendRequests] = useState(0);
+  const [unreadMessages, setUnreadMessages] = useState(0);
+  const [openSupportTickets, setOpenSupportTickets] = useState(0);
+  const [messageTargetUserId, setMessageTargetUserId] = useState<string | null>(null);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loginLoading, setLoginLoading] = useState(false);
+  const [loginError, setLoginError] = useState("");
+  const [uiScale, setUiScale] = useState<UiScale>(readUiScale);
+  const [navOpen, setNavOpen] = useState(false);
+  const [navigationMode, setNavigationMode] = useState<NavigationMode>(readNavigationMode);
+  const [notificationBadges, setNotificationBadges] = useState(readNotificationBadges);
+  const [performance, setPerformance] = useState<PerformanceSettings>(readPerformanceSettings);
+  const [windowActive, setWindowActive] = useState(true);
+  const [moderationState, setModerationState] = useState<ModerationState>(EMPTY_MODERATION_STATE);
 
   useEffect(() => {
     let mounted = true;
 
     async function initializeAuth() {
-      const {
-        data: { session },
-      } =
-        await supabase.auth.getSession();
-
-      if (!mounted) {
-        return;
-      }
-
-      setSession(session);
-
-      if (session?.user) {
-        await loadAllUserData(
-          session.user.id
-        );
-      }
-
-      if (mounted) {
-        setAuthLoading(false);
-      }
+      const { data: { session: currentSession } } = await supabase.auth.getSession();
+      if (!mounted) return;
+      setSession(currentSession);
+      if (currentSession?.user) await loadAllUserData(currentSession.user.id);
+      if (mounted) setAuthLoading(false);
     }
 
     void initializeAuth();
 
-    const {
-      data: { subscription },
-    } =
-      supabase.auth.onAuthStateChange(
-        (_event, currentSession) => {
-          setSession(currentSession);
-
-          if (currentSession?.user) {
-            void loadAllUserData(
-              currentSession.user.id
-            );
-          } else {
-            clearUserData();
-          }
-        }
-      );
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, currentSession) => {
+      setSession(currentSession);
+      if (currentSession?.user) void loadAllUserData(currentSession.user.id);
+      else clearUserData();
+    });
 
     return () => {
       mounted = false;
@@ -214,117 +202,115 @@ function App() {
   }, []);
 
   useEffect(() => {
-    localStorage.setItem(
-      "gamemate-ui-scale",
-      uiScale
-    );
+    localStorage.setItem("gamemate-ui-scale", uiScale);
   }, [uiScale]);
+
+
   useEffect(() => {
-  if (!session?.user?.id) return;
+    localStorage.setItem("gamemate-navigation-mode", navigationMode);
+  }, [navigationMode]);
 
-  const userId = session.user.id;
+  useEffect(() => {
+    localStorage.setItem("gamemate-notification-badges-enabled", String(notificationBadges));
+  }, [notificationBadges]);
 
-  let refreshTimer: ReturnType<typeof setTimeout> | null = null;
 
-  const refreshData = () => {
-    if (refreshTimer) {
-      clearTimeout(refreshTimer);
-    }
+  useEffect(() => {
+    if (!session?.user?.id) return;
 
-    refreshTimer = setTimeout(() => {
-      loadAllUserData(userId);
-    }, 250);
-  };
+    let stopped = false;
 
-  const channel = supabase
-    .channel(`gamemate-user-sync-${userId}`)
+    const publishPresence = async () => {
+      if (stopped) return;
+      const status = readPresenceStatus();
+      const { error } = await supabase.rpc("set_my_presence", { p_status: status });
+      if (error) console.error("Presence:", error);
+    };
 
-    // Profil
-    .on(
-      "postgres_changes",
-      {
-        event: "*",
-        schema: "public",
-        table: "profiles",
-        filter: `id=eq.${userId}`,
-      },
-      refreshData
-    )
+    void publishPresence();
 
-    // Jeux / plateformes / rang / rôle...
-    .on(
-      "postgres_changes",
-      {
-        event: "*",
-        schema: "public",
-        table: "user_games",
-        filter: `user_id=eq.${userId}`,
-      },
-      refreshData
-    )
+    const heartbeat = window.setInterval(() => {
+      void publishPresence();
+    }, 30000);
 
-    // Gaming DNA
-    .on(
-      "postgres_changes",
-      {
-        event: "*",
-        schema: "public",
-        table: "user_gaming_dna",
-        filter: `user_id=eq.${userId}`,
-      },
-      refreshData
-    )
+    const onPresenceStatusChanged = () => {
+      void publishPresence();
+    };
 
-    // Disponibilités
-    .on(
-      "postgres_changes",
-      {
-        event: "*",
-        schema: "public",
-        table: "user_availability",
-        filter: `user_id=eq.${userId}`,
-      },
-      refreshData
-    )
+    const onBeforeUnload = () => {
+      void supabase.rpc("set_my_presence", { p_status: "offline" });
+    };
 
-    // Ce que tu recherches
-    .on(
-      "postgres_changes",
-      {
-        event: "*",
-        schema: "public",
-        table: "user_looking_for",
-        filter: `user_id=eq.${userId}`,
-      },
-      refreshData
-    )
+    window.addEventListener("gamemate-presence-status-changed", onPresenceStatusChanged);
+    window.addEventListener("beforeunload", onBeforeUnload);
 
-    .subscribe();
+    return () => {
+      stopped = true;
+      window.clearInterval(heartbeat);
+      window.removeEventListener("gamemate-presence-status-changed", onPresenceStatusChanged);
+      window.removeEventListener("beforeunload", onBeforeUnload);
+      void supabase.rpc("set_my_presence", { p_status: "offline" });
+    };
+  }, [session?.user?.id]);
 
-  const refreshOnFocus = () => {
-    loadAllUserData(userId);
-  };
 
-  const refreshOnVisibility = () => {
-    if (document.visibilityState === "visible") {
-      loadAllUserData(userId);
-    }
-  };
+  useEffect(() => {
+    const refresh = () => {
+      if (session?.user?.id) void loadProfile(session.user.id);
+    };
+    window.addEventListener("gamemate-profile-updated", refresh);
+    return () => window.removeEventListener("gamemate-profile-updated", refresh);
+  }, [session?.user?.id]);
 
-  window.addEventListener("focus", refreshOnFocus);
-  document.addEventListener("visibilitychange", refreshOnVisibility);
+  useEffect(() => {
+    localStorage.setItem("gamemate-performance-settings", JSON.stringify(performance));
+  }, [performance]);
 
-  return () => {
-    if (refreshTimer) {
-      clearTimeout(refreshTimer);
-    }
+  useEffect(() => {
+    const markActive = () => setWindowActive(true);
+    const markInactive = () => setWindowActive(false);
+    window.addEventListener("focus", markActive);
+    window.addEventListener("blur", markInactive);
+    return () => {
+      window.removeEventListener("focus", markActive);
+      window.removeEventListener("blur", markInactive);
+    };
+  }, []);
 
-    window.removeEventListener("focus", refreshOnFocus);
-    document.removeEventListener("visibilitychange", refreshOnVisibility);
+  useEffect(() => {
+    if (!session?.user?.id) return;
+    const userId = session.user.id;
+    let refreshTimer: ReturnType<typeof setTimeout> | null = null;
 
-    supabase.removeChannel(channel);
-  };
-}, [session?.user?.id]);
+    const refreshData = () => {
+      if (refreshTimer) clearTimeout(refreshTimer);
+      refreshTimer = setTimeout(() => void loadAllUserData(userId), 250);
+    };
+
+    const channel = supabase
+      .channel(`gamemate-user-sync-${userId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "profiles", filter: `id=eq.${userId}` }, refreshData)
+      .on("postgres_changes", { event: "*", schema: "public", table: "user_games", filter: `user_id=eq.${userId}` }, refreshData)
+      .on("postgres_changes", { event: "*", schema: "public", table: "user_gaming_dna", filter: `user_id=eq.${userId}` }, refreshData)
+      .on("postgres_changes", { event: "*", schema: "public", table: "user_availability", filter: `user_id=eq.${userId}` }, refreshData)
+      .on("postgres_changes", { event: "*", schema: "public", table: "user_looking_for", filter: `user_id=eq.${userId}` }, refreshData)
+      .subscribe();
+
+    const refreshOnFocus = () => void loadAllUserData(userId);
+    const refreshOnVisibility = () => {
+      if (document.visibilityState === "visible") void loadAllUserData(userId);
+    };
+
+    window.addEventListener("focus", refreshOnFocus);
+    document.addEventListener("visibilitychange", refreshOnVisibility);
+
+    return () => {
+      if (refreshTimer) clearTimeout(refreshTimer);
+      window.removeEventListener("focus", refreshOnFocus);
+      document.removeEventListener("visibilitychange", refreshOnVisibility);
+      void supabase.removeChannel(channel);
+    };
+  }, [session?.user?.id]);
 
   function clearUserData() {
     setProfile(null);
@@ -334,11 +320,8 @@ function App() {
     setLookingFor([]);
   }
 
-  async function loadAllUserData(
-    userId: string
-  ) {
+  async function loadAllUserData(userId: string) {
     setProfileLoading(true);
-
     try {
       await Promise.all([
         loadProfile(userId),
@@ -352,1962 +335,1032 @@ function App() {
     }
   }
 
-  async function loadProfile(
-    userId: string
-  ) {
-    const {
-      data,
-      error,
-    } = await supabase
+  async function loadProfile(userId: string) {
+    const { data, error } = await supabase
       .from("profiles")
-      .select(
-        `
-        username,
-        display_name,
-        avatar_url,
-        bio,
-        region,
-        language
-        `
-      )
+      .select("username, display_name, avatar_url, banner_url, equipped_frame_id, equipped_banner_cosmetic_id, bio, region, language")
       .eq("id", userId)
       .single();
 
     if (error) {
-      console.error(
-        "Erreur profil :",
-        error
-      );
+      console.error("Erreur profil :", error);
       return;
     }
-
     setProfile(data);
   }
 
-  async function loadGames(
-    userId: string
-  ) {
-    const {
-      data: userGameRows,
-      error: userGamesError,
-    } = await supabase
+  async function loadGames(userId: string) {
+    const { data: userGameRows, error: userGamesError } = await supabase
       .from("user_games")
-      .select(
-        `
-        game_id,
-        platform_id,
-        is_primary,
-        rank_text,
-        role_text,
-        mode_text,
-        mic_enabled,
-        crossplay_enabled
-        `
-      )
+      .select("game_id, platform_id, is_primary, rank_text, role_text, mode_text, mic_enabled, crossplay_enabled")
       .eq("user_id", userId);
 
     if (userGamesError) {
-      console.error(
-        "Erreur user_games :",
-        userGamesError
-      );
+      console.error("Erreur user_games :", userGamesError);
       return;
     }
 
-    const rows =
-      userGameRows ?? [];
-
-    const gameIds = [
-      ...new Set(
-        rows.map(
-          (row) => row.game_id
-        )
-      ),
-    ];
-
-    const platformIds = [
-      ...new Set(
-        rows
-          .map(
-            (row) =>
-              row.platform_id
-          )
-          .filter(Boolean)
-      ),
-    ] as string[];
-
+    const rows = userGameRows ?? [];
+    const gameIds = [...new Set(rows.map((row) => row.game_id))];
+    const platformIds = [...new Set(rows.map((row) => row.platform_id).filter(Boolean))] as string[];
     let games: Game[] = [];
     let platforms: Platform[] = [];
 
     if (gameIds.length > 0) {
-      const {
-        data,
-        error,
-      } = await supabase
-        .from("games")
-        .select("id, name")
-        .in("id", gameIds);
-
-      if (error) {
-        console.error(
-          "Erreur games :",
-          error
-        );
-      } else {
-        games = data ?? [];
-      }
+      const { data, error } = await supabase.from("games").select("id, name").in("id", gameIds);
+      if (error) console.error("Erreur games :", error);
+      else games = data ?? [];
     }
 
-    if (
-      platformIds.length > 0
-    ) {
-      const {
-        data,
-        error,
-      } = await supabase
-        .from("platforms")
-        .select("id, name")
-        .in(
-          "id",
-          platformIds
-        );
-
-      if (error) {
-        console.error(
-          "Erreur platforms :",
-          error
-        );
-      } else {
-        platforms =
-          data ?? [];
-      }
+    if (platformIds.length > 0) {
+      const { data, error } = await supabase.from("platforms").select("id, name").in("id", platformIds);
+      if (error) console.error("Erreur platforms :", error);
+      else platforms = data ?? [];
     }
 
-    const mapped: UserGame[] =
-      rows.map((row) => {
-        const game =
-          games.find(
-            (item) =>
-              item.id ===
-              row.game_id
-          );
+    const mapped: UserGame[] = rows.map((row) => {
+      const game = games.find((item) => item.id === row.game_id);
+      const platform = platforms.find((item) => item.id === row.platform_id);
+      return {
+        ...row,
+        gameName: game?.name ?? "Jeu inconnu",
+        platformName: platform?.name ?? null,
+      };
+    });
 
-        const platform =
-          platforms.find(
-            (item) =>
-              item.id ===
-              row.platform_id
-          );
-
-        return {
-          ...row,
-          gameName:
-            game?.name ??
-            "Jeu inconnu",
-          platformName:
-            platform?.name ??
-            null,
-        };
-      });
-
-    mapped.sort(
-      (a, b) => {
-        if (
-          a.is_primary !==
-          b.is_primary
-        ) {
-          return a.is_primary
-            ? -1
-            : 1;
-        }
-
-        return a.gameName.localeCompare(
-          b.gameName
-        );
-      }
-    );
-
+    mapped.sort((a, b) => a.is_primary !== b.is_primary ? (a.is_primary ? -1 : 1) : a.gameName.localeCompare(b.gameName));
     setUserGames(mapped);
   }
 
-  async function loadGamingDna(
-    userId: string
-  ) {
-    const {
-      data: relations,
-      error: relationError,
-    } = await supabase
-      .from(
-        "user_gaming_dna"
-      )
+  async function loadGamingDna(userId: string) {
+    const { data: relations, error: relationError } = await supabase
+      .from("user_gaming_dna")
       .select("tag_id")
       .eq("user_id", userId);
 
     if (relationError) {
-      console.error(
-        "Erreur user_gaming_dna :",
-        relationError
-      );
+      console.error("Erreur user_gaming_dna :", relationError);
       return;
     }
 
-    const ids =
-      (relations ?? []).map(
-        (row) => row.tag_id
-      );
-
+    const ids = (relations ?? []).map((row) => row.tag_id);
     if (ids.length === 0) {
       setGamingDna([]);
       return;
     }
 
-    const {
-      data,
-      error,
-    } = await supabase
-      .from(
-        "gaming_dna_tags"
-      )
-      .select(
-        "id, name, category"
-      )
+    const { data, error } = await supabase
+      .from("gaming_dna_tags")
+      .select("id, name, category")
       .in("id", ids);
 
     if (error) {
-      console.error(
-        "Erreur gaming_dna_tags :",
-        error
-      );
+      console.error("Erreur gaming_dna_tags :", error);
       return;
     }
-
-    setGamingDna(
-      data ?? []
-    );
+    setGamingDna(data ?? []);
   }
 
-  async function loadAvailability(
-    userId: string
-  ) {
-    const {
-      data,
-      error,
-    } = await supabase
-      .from(
-        "user_availability"
-      )
-      .select(
-        `
-        day_of_week,
-        start_time,
-        end_time,
-        timezone
-        `
-      )
-      .eq(
-        "user_id",
-        userId
-      )
-      .order(
-        "day_of_week",
-        {
-          ascending: true,
-        }
-      );
+  async function loadAvailability(userId: string) {
+    const { data, error } = await supabase
+      .from("user_availability")
+      .select("day_of_week, start_time, end_time, timezone")
+      .eq("user_id", userId)
+      .order("day_of_week", { ascending: true });
 
     if (error) {
-      console.error(
-        "Erreur availability :",
-        error
-      );
+      console.error("Erreur availability :", error);
       return;
     }
-
-    setAvailability(
-      data ?? []
-    );
+    setAvailability(data ?? []);
   }
 
-  async function loadLookingFor(
-    userId: string
-  ) {
-    const {
-      data: relations,
-      error: relationError,
-    } = await supabase
-      .from(
-        "user_looking_for"
-      )
+  async function loadLookingFor(userId: string) {
+    const { data: relations, error: relationError } = await supabase
+      .from("user_looking_for")
       .select("option_id")
-      .eq(
-        "user_id",
-        userId
-      );
+      .eq("user_id", userId);
 
     if (relationError) {
-      console.error(
-        "Erreur user_looking_for :",
-        relationError
-      );
+      console.error("Erreur user_looking_for :", relationError);
       return;
     }
 
-    const ids =
-      (relations ?? []).map(
-        (row) =>
-          row.option_id
-      );
-
+    const ids = (relations ?? []).map((row) => row.option_id);
     if (ids.length === 0) {
       setLookingFor([]);
       return;
     }
 
-    const {
-      data,
-      error,
-    } = await supabase
-      .from(
-        "looking_for_options"
-      )
-      .select(
-        "id, label, slug"
-      )
+    const { data, error } = await supabase
+      .from("looking_for_options")
+      .select("id, label, slug")
       .in("id", ids);
 
     if (error) {
-      console.error(
-        "Erreur looking_for_options :",
-        error
-      );
+      console.error("Erreur looking_for_options :", error);
       return;
     }
-
-    setLookingFor(
-      data ?? []
-    );
+    setLookingFor(data ?? []);
   }
 
-  async function handleLogin(
-    event:
-      FormEvent<HTMLFormElement>
-  ) {
+  async function handleLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-
     setLoginError("");
     setLoginLoading(true);
 
-    const {
-      data,
-      error,
-    } =
-      await supabase.auth
-        .signInWithPassword({
-          email:
-            email.trim(),
-          password,
-        });
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password,
+    });
 
     if (error) {
-      console.error(
-        "Erreur connexion :",
-        error
-      );
-
-      setLoginError(
-        error.message
-      );
-
+      console.error("Erreur connexion :", error);
+      setLoginError(error.message);
       setLoginLoading(false);
       return;
     }
 
-    setSession(
-      data.session
-    );
-
-    if (data.user) {
-      await loadAllUserData(
-        data.user.id
-      );
-    }
-
+    setSession(data.session);
+    if (data.user) await loadAllUserData(data.user.id);
     setPassword("");
     setShowLogin(false);
     setLoginLoading(false);
   }
 
   async function handleLogout() {
-    await supabase.auth
-      .signOut();
-
+    await supabase.auth.signOut();
     setPublicProfileUserId(null);
-
     setSession(null);
-
     clearUserData();
-
     setEmail("");
     setPassword("");
-
     navigateTo("home");
   }
 
-  async function minimizeWindow() {
-    await appWindow.minimize();
-  }
+  async function minimizeWindow() { await appWindow.minimize(); }
+  async function toggleMaximizeWindow() { await appWindow.toggleMaximize(); }
+  async function closeWindow() { await appWindow.close(); }
+  async function startDragging() { await appWindow.startDragging(); }
 
-  async function toggleMaximizeWindow() {
-    await appWindow
-      .toggleMaximize();
-  }
 
-  async function closeWindow() {
-    await appWindow.close();
-  }
+  useEffect(() => {
+    if (!session?.user?.id) {
+      setPendingFriendRequests(0);
+      return;
+    }
 
-  async function startDragging() {
-    await appWindow
-      .startDragging();
-  }
+    const userId = session.user.id;
+    let mounted = true;
+
+    async function loadPendingFriendRequests() {
+      const { count, error } = await supabase
+        .from("friendships")
+        .select("id", { count: "exact", head: true })
+        .eq("addressee_id", userId)
+        .eq("status", "pending");
+
+      if (!mounted) return;
+
+      if (error) {
+        console.error("Pending friend requests:", error);
+        return;
+      }
+
+      setPendingFriendRequests(count ?? 0);
+    }
+
+    void loadPendingFriendRequests();
+
+    const channel = supabase
+      .channel(`friend-request-badge:${userId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "friendships",
+        },
+        (payload) => {
+          const next = payload.new as
+            | { addressee_id?: string; status?: string }
+            | null;
+          const previous = payload.old as
+            | { addressee_id?: string; status?: string }
+            | null;
+
+          const concernsUser =
+            next?.addressee_id === userId ||
+            previous?.addressee_id === userId;
+
+          if (concernsUser) {
+            void loadPendingFriendRequests();
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      mounted = false;
+      void supabase.removeChannel(channel);
+    };
+  }, [session?.user?.id]);
+
+
+  useEffect(() => {
+    if (!session?.user?.id) {
+      setUnreadMessages(0);
+      return;
+    }
+
+    const userId = session.user.id;
+    let mounted = true;
+
+    async function loadUnreadMessages() {
+      const { data: conversations, error: conversationsError } = await supabase
+        .from("conversations")
+        .select("id")
+        .or(`user_a.eq.${userId},user_b.eq.${userId}`);
+
+      if (!mounted) return;
+
+      if (conversationsError) {
+        console.error("Unread messages / conversations:", conversationsError);
+        return;
+      }
+
+      const conversationIds = (conversations ?? []).map((row) => row.id);
+
+      if (conversationIds.length === 0) {
+        setUnreadMessages(0);
+        return;
+      }
+
+      const { count, error } = await supabase
+        .from("messages")
+        .select("id", { count: "exact", head: true })
+        .in("conversation_id", conversationIds)
+        .neq("sender_id", userId)
+        .is("read_at", null);
+
+      if (!mounted) return;
+
+      if (error) {
+        console.error("Unread messages:", error);
+        return;
+      }
+
+      setUnreadMessages(count ?? 0);
+    }
+
+    void loadUnreadMessages();
+
+    const channel = supabase
+      .channel(`message-badge:${userId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "messages" },
+        () => {
+          void loadUnreadMessages();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      mounted = false;
+      void supabase.removeChannel(channel);
+    };
+  }, [session?.user?.id]);
+
+
+  useEffect(() => {
+    if (!session?.user?.id) {
+      setModerationState(EMPTY_MODERATION_STATE);
+      return;
+    }
+
+    const userId = session.user.id;
+    let mounted = true;
+
+    const loadModerationState = async () => {
+      const { data, error } = await supabase.rpc("get_my_moderation_state");
+
+      if (!mounted) return;
+
+      if (error) {
+        console.error("Moderation state:", error);
+        return;
+      }
+
+      setModerationState((data ?? EMPTY_MODERATION_STATE) as ModerationState);
+    };
+
+    void loadModerationState();
+
+    const channel = supabase
+      .channel(`moderation-state:${userId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "moderation_sanctions",
+          filter: `user_id=eq.${userId}`,
+        },
+        () => void loadModerationState()
+      )
+      .subscribe();
+
+    const timer = window.setInterval(() => {
+      void loadModerationState();
+    }, 30000);
+
+    const onVisible = () => {
+      if (document.visibilityState === "visible") {
+        void loadModerationState();
+      }
+    };
+
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => {
+      mounted = false;
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+      void supabase.removeChannel(channel);
+    };
+  }, [session?.user?.id]);
+
+
+  useEffect(() => {
+    if (!session?.user?.id) {
+      setOpenSupportTickets(0);
+      return;
+    }
+
+    let mounted = true;
+
+    const loadOpenSupportTickets = async () => {
+      const { count, error } = await supabase
+        .from("support_tickets")
+        .select("*", { count: "exact", head: true })
+        .not("status", "in", '("resolved","closed")');
+
+      if (!mounted) return;
+      if (error) {
+        console.error("Support badge:", error);
+        return;
+      }
+
+      setOpenSupportTickets(count ?? 0);
+    };
+
+    void loadOpenSupportTickets();
+
+    const channel = supabase
+      .channel(`support-ticket-badge:${session.user.id}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "support_tickets" },
+        () => void loadOpenSupportTickets()
+      )
+      .subscribe();
+
+    return () => {
+      mounted = false;
+      void supabase.removeChannel(channel);
+    };
+  }, [session?.user?.id]);
 
   function navigateTo(nextSection: Section) {
     setPublicProfileUserId(null);
     setSection(nextSection);
+    setNavOpen(false);
   }
 
-  const displayName =
-    profile?.display_name ||
-    profile?.username ||
-    session?.user.email ||
-    "Compte GameMate";
+  const displayName = profile?.display_name || profile?.username || session?.user.email || "Compte GameMate";
+  const avatarLetter = displayName.slice(0, 1).toUpperCase();
 
-  const avatarLetter =
-    displayName
-      .slice(0, 1)
-      .toUpperCase();
+  const performanceStyle = {
+    "--gm-glow": `${performance.glow / 100}`,
+    "--gm-blur": `${Math.round(6 + (performance.blur / 100) * 18)}px`,
+    "--gm-particles": `${performance.particles / 100}`,
+    "--gm-motion": `${performance.motion / 100}`,
+    "--gm-aurora-duration": `${Math.max(10, 30 - performance.motion * 0.18)}s`,
+    "--gm-particle-duration": `${Math.max(16, 44 - performance.motion * 0.24)}s`,
+    "--gm-scan-duration": `${Math.max(4, 10 - performance.motion * 0.055)}s`,
+    "--gm-pulse-duration": `${Math.max(1.1, 2.5 - performance.motion * 0.012)}s`,
+    "--gm-orbit-duration": `${Math.max(12, 34 - performance.motion * 0.18)}s`,
+  } as CSSProperties;
 
-  const titleMap:
-    Record<
-      Section,
-      string
-    > = {
-    home: "Accueil",
-    play: "Play Now",
-    mates:
-      "Trouver des mates",
-    squads: "Squads",
-    messages: "Messages",
-    communities:
-      "Communautés",
-    profile: "Profil",
-    settings: "Paramètres",
-  };
+  const shouldThrottleEffects = performance.reduceWhenInactive && !windowActive;
+
+  const blockingSanction = moderationState.active_sanctions.find(
+    (sanction) => sanction.type === "ban" || sanction.type === "suspension"
+  ) ?? null;
+
+  const muteSanction = moderationState.active_sanctions.find(
+    (sanction) => sanction.type === "mute"
+  ) ?? null;
+
+  const warningSanction = moderationState.active_sanctions.find(
+    (sanction) => sanction.type === "warning"
+  ) ?? null;
+
+  const visibleNoticeSanction = muteSanction ?? warningSanction;
 
   return (
     <div
-      className={`shell ui-scale-${uiScale}`}
+      className={`gm-shell ui-scale-${uiScale} nav-mode-${navigationMode} ${shouldThrottleEffects ? "is-paused" : ""}`}
+      style={performanceStyle}
     >
-      <div className="app">
-        <div
-          className="titlebar"
-          onMouseDown={(
-            event
-          ) => {
-            if (
-              event.button === 0
-            ) {
-              void startDragging();
-            }
-          }}
-          onDoubleClick={() => {
-            void toggleMaximizeWindow();
-          }}
-        >
-          <div className="titlebar-brand">
-            <img
-              src="/gamemate-logo.png"
-              alt=""
-            />
-
-            <strong>
-              GameMate
-            </strong>
-
-            <span>
-              Companion
-            </span>
-          </div>
-
-          <div
-            className="window-controls"
-            onMouseDown={(
-              event
-            ) =>
-              event.stopPropagation()
-            }
-            onDoubleClick={(
-              event
-            ) =>
-              event.stopPropagation()
-            }
-          >
-            <button
-              type="button"
-              onClick={() =>
-                void minimizeWindow()
-              }
-              aria-label="Réduire"
-            >
-              <span className="minimize-icon" />
-            </button>
-
-            <button
-              type="button"
-              onClick={() =>
-                void toggleMaximizeWindow()
-              }
-              aria-label="Agrandir"
-            >
-              <span className="maximize-icon" />
-            </button>
-
-            <button
-              type="button"
-              className="close"
-              onClick={() =>
-                void closeWindow()
-              }
-              aria-label="Fermer"
-            >
-              ×
-            </button>
-          </div>
+      <header
+        className="gm-windowbar"
+        onMouseDown={(event) => {
+          if (event.button === 0) void startDragging();
+        }}
+        onDoubleClick={() => void toggleMaximizeWindow()}
+      >
+        <div className="gm-windowbar-brand">
+          <img src="/gamemate-logo.png" alt="" />
+          <strong>GameMate</strong>
+          <span>Companion</span>
         </div>
+        <div className="gm-windowbar-spacer" />
+        <div
+          className="gm-window-controls"
+          onMouseDown={(event) => event.stopPropagation()}
+          onDoubleClick={(event) => event.stopPropagation()}
+        >
+          <button type="button" onClick={() => void minimizeWindow()} aria-label="Réduire">—</button>
+          <button type="button" onClick={() => void toggleMaximizeWindow()} aria-label="Agrandir">□</button>
+          <button type="button" className="close" onClick={() => void closeWindow()} aria-label="Fermer">×</button>
+        </div>
+      </header>
 
-        <div className="body">
-          <aside className="sidebar">
-            <div className="sidebar-head">
-              <img
-                src="/gamemate-logo.png"
-                alt="GameMate"
+      <div className="gm-app">
+        <aside className={`gm-sidebar ${navOpen ? "open" : ""}`}>
+          <button className="gm-brand" type="button" onClick={() => navigateTo("home")}>
+            <img src="/gamemate-logo.png" alt="" />
+            <span>
+              <strong>GameMate</strong>
+              <small>Play. Connect. Improve.</small>
+            </span>
+          </button>
+
+          <nav className="gm-nav">
+            <div className="gm-nav-group">
+              <span className="gm-nav-label">PRINCIPAL</span>
+              <NavItem active={section === "home"} icon="⌂" label="Accueil" onClick={() => navigateTo("home")} />
+              <NavItem active={section === "mates"} icon="⌕" label="Recherche" onClick={() => navigateTo("mates")} />
+              <NavItem active={section === "play"} icon="▶" label="Jouer" onClick={() => navigateTo("play")} />
+            </div>
+
+            <div className="gm-nav-group">
+              <span className="gm-nav-label">SOCIAL</span>
+              <NavItem active={section === "squads"} icon="◇" label="Teams" onClick={() => navigateTo("squads")} />
+              <NavItem active={section === "friends"} icon="♢" label="Amis" badge={notificationBadges ? pendingFriendRequests : 0} onClick={() => navigateTo("friends")} />
+              <NavItem
+                active={section === "messages"}
+                icon="✦"
+                label="Messages"
+                badge={notificationBadges ? unreadMessages : 0}
+                onClick={() => {
+                  setMessageTargetUserId(null);
+                  navigateTo("messages");
+                }}
+              />
+            </div>
+
+            <div className="gm-nav-group">
+              <span className="gm-nav-label">COMPTE</span>
+              <NavItem active={section === "profile"} icon="◌" label="Mon profil" onClick={() => navigateTo("profile")} />
+              <NavItem active={section === "support"} icon="?" label="Support" badge={notificationBadges ? openSupportTickets : 0} onClick={() => navigateTo("support")} />
+              <NavItem active={section === "settings"} icon="⚙" label="Paramètres" onClick={() => navigateTo("settings")} />
+              <NavItem active={section === "test"} icon="⌁" label="Mode test" onClick={() => navigateTo("test")} />
+            </div>
+          </nav>
+
+          <div className="gm-sidebar-bottom">
+            <div className="gm-slogan-card">
+              <span>GOOD PLAYERS</span>
+              <strong>BETTER MATES</strong>
+              <p>Joue, progresse et rencontre les bons joueurs.</p>
+            </div>
+
+            <button
+              type="button"
+              className="gm-account-card"
+              onClick={() => session ? navigateTo("profile") : setShowLogin(true)}
+            >
+              <span className="gm-account-avatar">
+                {authLoading ? "…" : profile?.avatar_url ? (
+                  <img src={profile.avatar_url} alt={displayName} />
+                ) : (
+                  avatarLetter
+                )}
+              </span>
+              <span>
+                <strong>{authLoading ? "Chargement..." : displayName}</strong>
+                <small>{session ? "Compte connecté" : "Se connecter"}</small>
+              </span>
+            </button>
+          </div>
+        </aside>
+
+        {navOpen && <button className="gm-mobile-overlay" type="button" onClick={() => setNavOpen(false)} aria-label="Fermer le menu" />}
+
+        <section className="gm-main">
+          <header className="gm-topbar">
+            <button
+              type="button"
+              className="gm-mobile-menu"
+              onClick={() => setNavOpen((value) => !value)}
+              aria-label="Ouvrir le menu"
+            >
+              ☰
+            </button>
+
+            <button type="button" className="gm-search" onClick={() => navigateTo("mates")}>
+              <span>⌕</span>
+              <span>Rechercher un joueur, une team, un jeu...</span>
+            </button>
+
+            <div className="gm-top-actions">
+              <button type="button" className="gm-icon-btn" onClick={() => navigateTo("friends")} aria-label="Amis">
+                ♢
+                {notificationBadges && pendingFriendRequests > 0 && <b>{pendingFriendRequests > 99 ? "99+" : pendingFriendRequests}</b>}
+              </button>
+
+              <button
+                type="button"
+                className="gm-icon-btn"
+                onClick={() => {
+                  setMessageTargetUserId(null);
+                  navigateTo("messages");
+                }}
+                aria-label="Messages"
+              >
+                ◯
+                {notificationBadges && unreadMessages > 0 && <b>{unreadMessages > 99 ? "99+" : unreadMessages}</b>}
+              </button>
+
+              <NotificationCenter
+                session={session}
+                totalCount={notificationBadges ? pendingFriendRequests + unreadMessages : 0}
+                onOpenFriends={() => navigateTo("friends")}
+                onOpenMessage={(userId) => {
+                  setMessageTargetUserId(userId);
+                  navigateTo("messages");
+                }}
+                onOpenSquads={() => navigateTo("squads")}
               />
 
+              <button
+                type="button"
+                className="gm-top-profile"
+                onClick={() => session ? navigateTo("profile") : setShowLogin(true)}
+              >
+                <span className="gm-top-avatar">
+                  {authLoading ? "…" : profile?.avatar_url ? (
+                    <img src={profile.avatar_url} alt={displayName} />
+                  ) : (
+                    avatarLetter
+                  )}
+                </span>
+                <span>
+                  <strong>{displayName}</strong>
+                  <small>{session ? "GameMate" : "Connexion"}</small>
+                </span>
+              </button>
+
+              <button type="button" className="gm-icon-btn" onClick={() => navigateTo("settings")} aria-label="Paramètres">⚙</button>
+            </div>
+          </header>
+
+          {!moderationState.restricted && visibleNoticeSanction && (
+            <div className={`gm-sanction-banner ${visibleNoticeSanction.type}`}>
               <div>
                 <strong>
-                  GameMate
+                  {visibleNoticeSanction.type === "mute"
+                    ? "Messagerie temporairement désactivée"
+                    : "Avertissement de modération"}
                 </strong>
-
-                <span>
-                  Gaming Social Hub
-                </span>
+                <span>{visibleNoticeSanction.reason}</span>
               </div>
-            </div>
 
-            <nav>
-              <NavButton
-                active={
-                  section ===
-                  "home"
-                }
-                label="Accueil"
-                icon="⌂"
-                onClick={() =>
-                  navigateTo("home")
-                }
-              />
-
-              <NavButton
-                active={
-                  section ===
-                  "play"
-                }
-                label="Play Now"
-                icon="▶"
-                onClick={() =>
-                  navigateTo("play")
-                }
-              />
-
-              <NavButton
-                active={
-                  section ===
-                  "mates"
-                }
-                label="Trouver des mates"
-                icon="◎"
-                onClick={() =>
-                  navigateTo("mates")
-                }
-              />
-
-              <NavButton
-                active={
-                  section ===
-                  "squads"
-                }
-                label="Squads"
-                icon="◇"
-                onClick={() =>
-                  navigateTo("squads")
-                }
-              />
-
-              <NavButton
-                active={
-                  section ===
-                  "messages"
-                }
-                label="Messages"
-                icon="✉"
-                onClick={() =>
-                  navigateTo("messages")
-                }
-              />
-
-              <NavButton
-                active={
-                  section ===
-                  "communities"
-                }
-                label="Communautés"
-                icon="◉"
-                onClick={() =>
-                  navigateTo("communities")
-                }
-              />
-
-              <div className="nav-separator" />
-
-              <NavButton
-                active={
-                  section ===
-                  "profile"
-                }
-                label="Profil"
-                icon="◌"
-                onClick={() =>
-                  navigateTo("profile")
-                }
-              />
-
-              <NavButton
-                active={
-                  section ===
-                  "settings"
-                }
-                label="Paramètres"
-                icon="⚙"
-                onClick={() =>
-                  navigateTo("settings")
-                }
-              />
-            </nav>
-
-            <div className="sidebar-bottom">
-              <div className="online-card">
-                <span
-                  className={
-                    session
-                      ? "online-dot"
-                      : "offline-dot"
-                  }
-                />
-
-                <div>
-                  <strong>
-                    {session
-                      ? "En ligne"
-                      : "Hors ligne"}
-                  </strong>
-
+              <div className="gm-sanction-banner-meta">
+                {visibleNoticeSanction.ends_at && (
                   <span>
-                    {session
-                      ? "Prêt à jouer"
-                      : "Connecte-toi"}
+                    Jusqu’au {formatSanctionDate(visibleNoticeSanction.ends_at)}
                   </span>
-                </div>
+                )}
+                <button type="button" onClick={() => navigateTo("support")}>
+                  Support
+                </button>
               </div>
             </div>
-          </aside>
-
-          <main className="main">
-            <header className="topbar">
-              <div>
-                <span className="eyebrow">
-                  GAMEMATE
-                </span>
-
-                <h1>
-                  {publicProfileUserId
-                    ? "Profil joueur"
-                    : titleMap[section]}
-                </h1>
-              </div>
-
-              <div className="topbar-right">
-                <button
-                  type="button"
-                  className="icon-button"
-                >
-                  ⌕
-                </button>
-
-                <button
-                  type="button"
-                  className="icon-button"
-                >
-                  ♢
-                </button>
-
-                <button
-                  type="button"
-                  className="user-chip user-chip-button"
-                  onClick={() => {
-                    if (session) {
-                      navigateTo("profile");
-                    } else {
-                      setShowLogin(
-                        true
-                      );
-                    }
-                  }}
-                >
-                  <div className="avatar">
-                    {authLoading ? (
-                      "…"
-                    ) : profile?.avatar_url ? (
-                      <img
-                        src={
-                          profile.avatar_url
-                        }
-                        alt={
-                          displayName
-                        }
-                      />
-                    ) : (
-                      avatarLetter
-                    )}
-                  </div>
-
-                  <div>
-                    <strong>
-                      {authLoading
-                        ? "Chargement..."
-                        : displayName}
-                    </strong>
-
-                    <span>
-                      {authLoading
-                        ? "Vérification..."
-                        : session
-                          ? "● Connecté"
-                          : "Non connecté"}
-                    </span>
-                  </div>
-                </button>
-              </div>
-            </header>
-
-            <div className="content">
-              {publicProfileUserId ? (
-                <PublicProfilePage
-                  userId={publicProfileUserId}
-                  onBack={() => {
-                    setPublicProfileUserId(null);
-                  }}
-                />
-              ) : (
-                <>
-              {section ===
-                "home" && (
-                <Home
-                  session={
-                    session
-                  }
-                  displayName={
-                    displayName
-                  }
-                  userGames={
-                    userGames
-                  }
-                  gamingDna={
-                    gamingDna
-                  }
-                  onLogin={() =>
-                    setShowLogin(
-                      true
-                    )
-                  }
-                  onPlay={() =>
-                    navigateTo("play")
-                  }
-                  onFindMates={() =>
-                    navigateTo("mates")
-                  }
-                />
-              )}
-
-              {section ===
-                "play" && (
-                <PlayNowScreen
-                  session={
-                    session
-                  }
-                  userGames={
-                    userGames
-                  }
-                  lookingFor={
-                    lookingFor
-                  }
-                  onLogin={() =>
-                    setShowLogin(
-                      true
-                    )
-                  }
-                />
-              )}
-
-              {section ===
-                "mates" && (
-                <FindMatesScreen
-                  session={session}
-                  userGames={userGames}
-                  gamingDna={gamingDna}
-                  lookingFor={lookingFor}
-                  onLogin={() => setShowLogin(true)}
-                  onOpenProfile={(userId) => {
-                    setPublicProfileUserId(userId);
-                  }}
-                />
-              )}
-
-              {section ===
-                "squads" && (
-                <Placeholder
-                  title="Squads"
-                  description="Création et gestion des squads GameMate."
-                />
-              )}
-
-              {section ===
-                "messages" && (
-                <Placeholder
-                  title="Messages"
-                  description="La messagerie GameMate sera disponible ici."
-                />
-              )}
-
-              {section ===
-                "communities" && (
-                <Placeholder
-                  title="Communautés"
-                  description="Découverte et gestion des communautés."
-                />
-              )}
-
-              {section ===
-                "profile" && (
-                <ProfilePage
-                  session={
-                    session
-                  }
-                  profile={
-                    profile
-                  }
-                  displayName={
-                    displayName
-                  }
-                  avatarLetter={
-                    avatarLetter
-                  }
-                  userGames={
-                    userGames
-                  }
-                  gamingDna={
-                    gamingDna
-                  }
-                  availability={
-                    availability
-                  }
-                  lookingFor={
-                    lookingFor
-                  }
-                  loading={
-                    profileLoading
-                  }
-                  onLogin={() =>
-                    setShowLogin(
-                      true
-                    )
-                  }
-                />
-              )}
-
-              {section ===
-                "settings" && (
-                <SettingsPage
-                  session={
-                    session
-                  }
-                  uiScale={
-                    uiScale
-                  }
-                  onScaleChange={
-                    setUiScale
-                  }
-                  onLogin={() =>
-                    setShowLogin(
-                      true
-                    )
-                  }
-                  onLogout={() =>
-                    void handleLogout()
-                  }
-                />
-              )}
-
-                </>
-              )}
-            </div>
-          </main>
-        </div>
-
-        {showLogin &&
-          !session && (
-            <LoginModal
-              email={email}
-              password={
-                password
-              }
-              loading={
-                loginLoading
-              }
-              error={
-                loginError
-              }
-              onEmailChange={
-                setEmail
-              }
-              onPasswordChange={
-                setPassword
-              }
-              onClose={() =>
-                setShowLogin(
-                  false
-                )
-              }
-              onSubmit={
-                handleLogin
-              }
-            />
           )}
-      </div>
-    </div>
-  );
-}
 
-function NavButton({
-  active,
-  label,
-  icon,
-  onClick,
-}: {
-  active: boolean;
-  label: string;
-  icon: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      className={`nav-item ${
-        active
-          ? "active"
-          : ""
-      }`}
-      onClick={onClick}
-    >
-      <span className="nav-icon">
-        {icon}
-      </span>
-
-      <span>
-        {label}
-      </span>
-    </button>
-  );
-}
-
-function Home({
-  session,
-  displayName,
-  userGames,
-  gamingDna,
-  onLogin,
-  onPlay,
-  onFindMates,
-}: {
-  session:
-    Session | null;
-  displayName: string;
-  userGames: UserGame[];
-  gamingDna:
-    GamingDnaTag[];
-  onLogin: () => void;
-  onPlay: () => void;
-  onFindMates: () => void;
-}) {
-  return (
-    <div className="home">
-      <section className="hero">
-        <div className="hero-glow glow-one" />
-        <div className="hero-glow glow-two" />
-
-        <div className="hero-copy">
-          <span className="hero-badge">
-            <i />
-            GAME ON
-          </span>
-
-          <h2>
-            {session
-              ? `Salut ${displayName}.`
-              : "Trouve tes"}
-
-            <span>
-              {session
-                ? " Prêt à jouer ?"
-                : " prochains mates."}
-            </span>
-          </h2>
-
-          <p>
-            Rejoins des joueurs qui correspondent
-            à ton style, ton niveau et tes
-            disponibilités.
-          </p>
-
-          <div className="hero-actions">
-            {session ? (
-              <>
-                <button
-                  type="button"
-                  className="primary"
-                  onClick={
-                    onPlay
-                  }
-                >
-                  ▶ Play Now
-                </button>
-
-                <button
-                  type="button"
-                  className="secondary"
-                  onClick={
-                    onFindMates
-                  }
-                >
-                  Trouver des mates
-                </button>
-              </>
+          <main className={`gm-content gm-section-${section}`}>
+            {publicProfileUserId ? (
+              <PublicProfilePage userId={publicProfileUserId} onBack={() => setPublicProfileUserId(null)} />
             ) : (
+              <>
+                {section === "home" && (
+                  <CleanHome
+                    session={session}
+                    displayName={displayName}
+                    profile={profile}
+                    userGames={userGames}
+                    gamingDna={gamingDna}
+                    lookingFor={lookingFor}
+                    onLogin={() => setShowLogin(true)}
+                    onPlay={() => navigateTo("play")}
+                    onFindMates={() => navigateTo("mates")}
+                    onSquads={() => navigateTo("squads")}
+                    onMessages={() => navigateTo("messages")}
+                    onProfile={() => navigateTo("profile")}
+                  />
+                )}
+
+                {section === "play" && (
+                  <PlayNowScreen
+                    session={session}
+                    userGames={userGames}
+                    lookingFor={lookingFor}
+                    onLogin={() => setShowLogin(true)}
+                  />
+                )}
+
+                {section === "mates" && (
+                  <FindMatesScreen
+                    session={session}
+                    userGames={userGames}
+                    gamingDna={gamingDna}
+                    lookingFor={lookingFor}
+                    onLogin={() => setShowLogin(true)}
+                    onOpenProfile={(userId) => setPublicProfileUserId(userId)}
+                  />
+                )}
+
+                {section === "squads" && (
+                  <SquadsPage session={session} onLogin={() => setShowLogin(true)} />
+                )}
+
+                {section === "friends" && (
+                  <FriendsPage
+                    session={session}
+                    onLogin={() => setShowLogin(true)}
+                    onOpenProfile={(userId) => setPublicProfileUserId(userId)}
+                    onOpenMessages={(userId) => {
+                      setMessageTargetUserId(userId);
+                      navigateTo("messages");
+                    }}
+                  />
+                )}
+
+                {section === "messages" && (
+                  <MessagesPage
+                    session={session}
+                    initialUserId={messageTargetUserId}
+                    onInitialUserHandled={() => setMessageTargetUserId(null)}
+                    onLogin={() => setShowLogin(true)}
+                    onOpenProfile={(userId) => setPublicProfileUserId(userId)}
+                    onUnreadCountChange={setUnreadMessages}
+                  />
+                )}
+
+                {section === "profile" && (
+                  <ProfilePage
+                    session={session}
+                    profile={profile}
+                    displayName={displayName}
+                    avatarLetter={avatarLetter}
+                    userGames={userGames}
+                    gamingDna={gamingDna}
+                    availability={availability}
+                    lookingFor={lookingFor}
+                    loading={profileLoading}
+                    onLogin={() => setShowLogin(true)}
+                  />
+                )}
+
+                {section === "support" && (
+                  <SupportPage
+                    session={session}
+                    onLogin={() => setShowLogin(true)}
+                  />
+                )}
+
+                {section === "settings" && (
+                  <SettingsPage
+                    session={session}
+                    displayName={displayName}
+                    uiScale={uiScale}
+                    performance={performance}
+                    navigationMode={navigationMode}
+                    notificationBadges={notificationBadges}
+                    onScaleChange={setUiScale}
+                    onPerformanceChange={setPerformance}
+                    onNavigationModeChange={setNavigationMode}
+                    onNotificationBadgesChange={setNotificationBadges}
+                    onLogin={() => setShowLogin(true)}
+                    onLogout={() => void handleLogout()}
+                  />
+                )}
+
+                {section === "test" && (
+                  <TestModePage
+                    mainSession={session}
+                    mainDisplayName={displayName}
+                  />
+                )}
+              </>
+            )}
+          </main>
+        </section>
+      </div>
+
+      {session && moderationState.restricted && blockingSanction && section !== "support" && (
+        <div className="gm-sanction-lock">
+          <section className={`gm-sanction-lock-card ${blockingSanction.type}`}>
+            <div className="gm-sanction-lock-icon">
+              {blockingSanction.type === "ban" ? "×" : "!"}
+            </div>
+
+            <span className="gm-sanction-lock-kicker">MODÉRATION GAMEMATE</span>
+
+            <h1>
+              {blockingSanction.type === "ban"
+                ? "Compte banni"
+                : "Compte temporairement suspendu"}
+            </h1>
+
+            <p className="gm-sanction-lock-reason">
+              {blockingSanction.reason}
+            </p>
+
+            <div className="gm-sanction-lock-details">
+              <div>
+                <small>Sanction</small>
+                <strong>
+                  {blockingSanction.type === "ban"
+                    ? "Bannissement"
+                    : "Suspension"}
+                </strong>
+              </div>
+
+              <div>
+                <small>Fin prévue</small>
+                <strong>
+                  {blockingSanction.ends_at
+                    ? formatSanctionDate(blockingSanction.ends_at)
+                    : "Durée indéterminée"}
+                </strong>
+              </div>
+            </div>
+
+            <p className="gm-sanction-lock-help">
+              Le Support reste accessible si tu souhaites demander des explications
+              ou signaler une erreur.
+            </p>
+
+            <div className="gm-sanction-lock-actions">
               <button
                 type="button"
                 className="primary"
-                onClick={
-                  onLogin
-                }
+                onClick={() => navigateTo("support")}
               >
-                Se connecter
+                Contacter le support
               </button>
-            )}
-          </div>
-        </div>
 
-        <div className="hero-art">
-          <div className="hero-orbit orbit-one" />
-          <div className="hero-orbit orbit-two" />
-
-          <img
-            src="/gamemate-logo.png"
-            alt=""
-          />
-        </div>
-      </section>
-
-      <section className="quick-grid">
-        <div className="panel primary-panel">
-          <span className="eyebrow">
-            TES JEUX
-          </span>
-
-          <h3>
-            {userGames.length >
-            0
-              ? `${userGames.length} jeu${
-                  userGames.length >
-                  1
-                    ? "x"
-                    : ""
-                }`
-              : "Aucun jeu"}
-          </h3>
-
-          <div className="profile-tag-list">
-            {userGames
-              .slice(0, 5)
-              .map(
-                (game) => (
-                  <span
-                    key={`${game.game_id}-${game.platform_id}`}
-                    className="profile-tag"
-                  >
-                    {
-                      game.gameName
-                    }
-                  </span>
-                )
-              )}
-          </div>
-        </div>
-
-        <div className="panel">
-          <span className="eyebrow">
-            GAMING DNA
-          </span>
-
-          <h3>
-            Ton style
-          </h3>
-
-          <div className="profile-tag-list">
-            {gamingDna
-              .slice(0, 6)
-              .map(
-                (tag) => (
-                  <span
-                    key={
-                      tag.id
-                    }
-                    className="profile-tag"
-                  >
-                    {prettyValue(
-                      tag.name
-                    )}
-                  </span>
-                )
-              )}
-          </div>
-        </div>
-      </section>
-    </div>
-  )
-}
-
-function ProfilePage({
-  session,
-  profile,
-  displayName,
-  avatarLetter,
-  userGames,
-  gamingDna,
-  availability,
-  lookingFor,
-  loading,
-  onLogin,
-}: {
-  session:
-    Session | null;
-  profile:
-    Profile | null;
-  displayName: string;
-  avatarLetter: string;
-  userGames: UserGame[];
-  gamingDna:
-    GamingDnaTag[];
-  availability:
-    AvailabilityRow[];
-  lookingFor:
-    LookingForOption[];
-  loading: boolean;
-  onLogin: () => void;
-}) {
-  if (!session) {
-    return (
-      <LockedPage
-        title="Ton profil GameMate"
-        onLogin={onLogin}
-      />
-    );
-  }
-
-  if (loading) {
-    return (
-      <div className="profile-loading">
-        <div className="profile-loading-spinner" />
-
-        <span>
-          Chargement de ton
-          profil GameMate...
-        </span>
-      </div>
-    );
-  }
-
-  const primaryGame =
-    userGames.find(
-      (game) =>
-        game.is_primary
-    ) ??
-    userGames[0];
-
-  return (
-    <div className="gm-profile-page">
-      <section className="gm-profile-header">
-        <div className="gm-profile-header-glow" />
-
-        <div className="gm-profile-avatar-wrap">
-          <div className="gm-profile-avatar">
-            {profile?.avatar_url ? (
-              <img
-                src={
-                  profile.avatar_url
-                }
-                alt={
-                  displayName
-                }
-              />
-            ) : (
-              avatarLetter
-            )}
-          </div>
-
-          <span className="gm-online-indicator" />
-        </div>
-
-        <div className="gm-profile-identity">
-          <span className="eyebrow">
-            PROFIL GAMEMATE
-          </span>
-
-          <h2>
-            {displayName}
-          </h2>
-
-          <div className="gm-profile-meta">
-            {profile?.username && (
-              <span>
-                @
-                {
-                  profile.username
-                }
-              </span>
-            )}
-
-            {profile?.region && (
-              <span>
-                ◉{" "}
-                {prettyValue(
-                  profile.region
-                )}
-              </span>
-            )}
-
-            {profile?.language && (
-              <span>
-                ◇{" "}
-                {prettyValue(
-                  profile.language
-                )}
-              </span>
-            )}
-          </div>
-
-          <p className="gm-profile-bio">
-            {profile?.bio ||
-              "Aucune bio renseignée pour le moment."}
-          </p>
-        </div>
-
-        <div className="gm-profile-status">
-          <div className="gm-status-pill">
-            <span className="gm-status-dot" />
-            Disponible
-          </div>
-
-          {primaryGame && (
-            <div className="gm-primary-game-small">
-              <span>
-                JEU PRINCIPAL
-              </span>
-
-              <strong>
-                {prettyValue(
-                  primaryGame.gameName
-                )}
-              </strong>
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => void handleLogout()}
+              >
+                Se déconnecter
+              </button>
             </div>
-          )}
+          </section>
         </div>
-      </section>
+      )}
 
-      <section className="gm-profile-section">
-        <div className="gm-section-heading">
-          <div>
-            <span className="eyebrow">
-              BIBLIOTHÈQUE
-            </span>
-
-            <h3>
-              Mes jeux
-            </h3>
-          </div>
-
-          <span className="gm-section-count">
-            {
-              userGames.length
-            }
-          </span>
-        </div>
-
-        {userGames.length ===
-        0 ? (
-          <div className="gm-empty-card">
-            Aucun jeu configuré.
-          </div>
-        ) : (
-          <div className="gm-games-grid">
-            {userGames.map(
-              (game) => (
-                <GameProfileCard
-                  key={`${game.game_id}-${game.platform_id}`}
-                  game={
-                    game
-                  }
-                />
-              )
-            )}
-          </div>
-        )}
-      </section>
-
-      <section className="gm-profile-two-columns">
-        <ProfilePanel
-          eyebrow="PERSONNALITÉ"
-          title="Gaming DNA"
-        >
-          {gamingDna.length >
-          0 ? (
-            <div className="gm-tags">
-              {gamingDna.map(
-                (tag) => (
-                  <span
-                    className={`gm-tag gm-tag-${tag.category}`}
-                    key={
-                      tag.id
-                    }
-                  >
-                    {prettyValue(
-                      tag.name
-                    )}
-                  </span>
-                )
-              )}
-            </div>
-          ) : (
-            <p className="profile-empty-text">
-              Aucun Gaming DNA
-              configuré.
-            </p>
-          )}
-        </ProfilePanel>
-
-        <ProfilePanel
-          eyebrow="OBJECTIFS"
-          title="Je recherche"
-        >
-          {lookingFor.length >
-          0 ? (
-            <div className="gm-tags">
-              {lookingFor.map(
-                (
-                  option
-                ) => (
-                  <span
-                    className="gm-tag gm-tag-cyan"
-                    key={
-                      option.id
-                    }
-                  >
-                    {prettyValue(
-                      option.label
-                    )}
-                  </span>
-                )
-              )}
-            </div>
-          ) : (
-            <p className="profile-empty-text">
-              Aucune préférence
-              configurée.
-            </p>
-          )}
-        </ProfilePanel>
-      </section>
-
-      <section className="gm-profile-section">
-        <div className="gm-section-heading">
-          <div>
-            <span className="eyebrow">
-              PLANNING
-            </span>
-
-            <h3>
-              Disponibilités
-            </h3>
-          </div>
-
-          {availability[0]
-            ?.timezone && (
-            <span className="gm-timezone">
-              {
-                availability[0]
-                  .timezone
-              }
-            </span>
-          )}
-        </div>
-
-        {availability.length >
-        0 ? (
-          <AvailabilityCard
-            availability={
-              availability
-            }
-          />
-        ) : (
-          <div className="gm-empty-card">
-            Aucune disponibilité
-            configurée.
-          </div>
-        )}
-      </section>
-    </div>
-  );
-}
-
-function GameProfileCard({
-  game,
-}: {
-  game: UserGame;
-}) {
-  return (
-    <article
-      className={`gm-game-card ${
-        game.is_primary
-          ? "primary-game"
-          : ""
-      }`}
-    >
-      <div className="gm-game-card-top">
-        <div className="gm-game-icon">
-          {game.gameName
-            .slice(0, 2)
-            .toUpperCase()}
-        </div>
-
-        <div className="gm-game-title">
-          <div>
-            <strong>
-              {prettyValue(
-                game.gameName
-              )}
-            </strong>
-
-            {game.is_primary && (
-              <span className="gm-primary-badge">
-                ★ Principal
-              </span>
-            )}
-          </div>
-
-          <span>
-            {prettyValue(
-              game.platformName ||
-                "Plateforme inconnue"
-            )}
-          </span>
-        </div>
-      </div>
-
-      <div className="gm-game-details">
-        {game.rank_text && (
-          <GameDetail
-            label="Rang"
-            value={
-              game.rank_text
-            }
-          />
-        )}
-
-        {game.role_text && (
-          <GameDetail
-            label="Rôle"
-            value={
-              game.role_text
-            }
-          />
-        )}
-
-        {game.mode_text && (
-          <GameDetail
-            label="Mode"
-            value={
-              game.mode_text
-            }
-          />
-        )}
-      </div>
-
-      <div className="gm-game-features">
-        <span
-          className={
-            game.mic_enabled
-              ? "enabled"
-              : "disabled"
-          }
-        >
-          ◉ Micro
-        </span>
-
-        <span
-          className={
-            game.crossplay_enabled
-              ? "enabled"
-              : "disabled"
-          }
-        >
-          ↔ Crossplay
-        </span>
-      </div>
-    </article>
-  );
-}
-
-function GameDetail({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="gm-game-detail">
-      <span>
-        {label}
-      </span>
-
-      <strong>
-        {prettyValue(
-          value
-        )}
-      </strong>
-    </div>
-  );
-}
-
-function ProfilePanel({
-  eyebrow,
-  title,
-  children,
-}: {
-  eyebrow: string;
-  title: string;
-  children: ReactNode;
-}) {
-  return (
-    <div className="gm-profile-panel">
-      <span className="eyebrow">
-        {eyebrow}
-      </span>
-
-      <h3>
-        {title}
-      </h3>
-
-      {children}
-    </div>
-  );
-}
-
-function AvailabilityCard({
-  availability,
-}: {
-  availability:
-    AvailabilityRow[];
-}) {
-  const uniqueTimeSlots =
-    new Map<
-      string,
-      string[]
-    >();
-
-  availability.forEach(
-    (slot) => {
-      const timeKey =
-        `${formatTime(
-          slot.start_time
-        )} → ${formatTime(
-          slot.end_time
-        )}`;
-
-      const current =
-        uniqueTimeSlots.get(
-          timeKey
-        ) ?? [];
-
-      current.push(
-        dayNames[
-          slot.day_of_week
-        ]
-      );
-
-      uniqueTimeSlots.set(
-        timeKey,
-        current
-      );
-    }
-  );
-
-  return (
-    <div className="gm-availability">
-      {[
-        ...uniqueTimeSlots.entries(),
-      ].map(
-        ([time, days]) => (
-          <div
-            className="gm-availability-group"
-            key={time}
-          >
-            <div className="gm-day-list">
-              {days.map(
-                (day) => (
-                  <span
-                    className="gm-day"
-                    key={
-                      day
-                    }
-                  >
-                    {shortDay(
-                      day
-                    )}
-                  </span>
-                )
-              )}
-            </div>
-
-            <div className="gm-time">
-              <span>
-                ◷
-              </span>
-
-              <strong>
-                {time}
-              </strong>
-            </div>
-          </div>
-        )
+      {showLogin && !session && (
+        <CleanLoginModal
+          email={email}
+          password={password}
+          loading={loginLoading}
+          error={loginError}
+          onEmailChange={setEmail}
+          onPasswordChange={setPassword}
+          onClose={() => setShowLogin(false)}
+          onSubmit={handleLogin}
+        />
       )}
     </div>
   );
 }
 
-function SettingsPage({
-  session,
-  uiScale,
-  onScaleChange,
-  onLogin,
-  onLogout,
+
+function NavItem({
+  active,
+  icon,
+  label,
+  badge = 0,
+  onClick,
 }: {
-  session:
-    Session | null;
-  uiScale: UiScale;
-  onScaleChange:
-    (value: UiScale) => void;
-  onLogin: () => void;
-  onLogout: () => void;
+  active: boolean;
+  icon: string;
+  label: string;
+  badge?: number;
+  onClick: () => void;
 }) {
   return (
-    <div className="settings-page">
-      <div className="settings-header-card">
-        <span className="eyebrow">
-          GAMEMATE COMPANION
-        </span>
-
-        <h2>
-          Paramètres
-        </h2>
-
-        <p>
-          Personnalise
-          l’affichage et le
-          comportement du
-          Companion.
-        </p>
-      </div>
-
-      <section className="settings-section">
-        <div className="settings-section-heading">
-          <div>
-            <span className="eyebrow">
-              AFFICHAGE
-            </span>
-
-            <h3>
-              Taille de
-              l’interface
-            </h3>
-
-            <p>
-              Ajuste la taille
-              des textes,
-              boutons, cartes
-              et menus.
-            </p>
-          </div>
-        </div>
-
-        <div className="ui-scale-grid">
-          <ScaleOption
-            title="Compact"
-            description="Plus d’informations à l’écran."
-            value="compact"
-            current={
-              uiScale
-            }
-            onChange={
-              onScaleChange
-            }
-          />
-
-          <ScaleOption
-            title="Normal"
-            description="Taille équilibrée."
-            value="normal"
-            current={
-              uiScale
-            }
-            onChange={
-              onScaleChange
-            }
-          />
-
-          <ScaleOption
-            title="Grand"
-            description="Plus confortable à lire."
-            value="large"
-            current={
-              uiScale
-            }
-            onChange={
-              onScaleChange
-            }
-          />
-
-          <ScaleOption
-            title="Très grand"
-            description="Lisibilité maximale."
-            value="xlarge"
-            current={
-              uiScale
-            }
-            onChange={
-              onScaleChange
-            }
-          />
-        </div>
-      </section>
-
-      <section className="settings-section">
-        <div className="settings-section-heading">
-          <div>
-            <span className="eyebrow">
-              COMPTE
-            </span>
-
-            <h3>
-              Compte GameMate
-            </h3>
-          </div>
-        </div>
-
-        {session ? (
-          <div className="settings-account-card">
-            <div>
-              <strong>
-                Connecté
-              </strong>
-
-              <span>
-                {
-                  session.user
-                    .email
-                }
-              </span>
-            </div>
-
-            <button
-              type="button"
-              className="secondary"
-              onClick={
-                onLogout
-              }
-            >
-              Se déconnecter
-            </button>
-          </div>
-        ) : (
-          <div className="settings-account-card">
-            <div>
-              <strong>
-                Non connecté
-              </strong>
-
-              <span>
-                Connecte ton
-                compte
-                GameMate.
-              </span>
-            </div>
-
-            <button
-              type="button"
-              className="primary"
-              onClick={
-                onLogin
-              }
-            >
-              Se connecter
-            </button>
-          </div>
-        )}
-      </section>
-    </div>
-  );
-}
-
-function ScaleOption({
-  title,
-  description,
-  value,
-  current,
-  onChange,
-}: {
-  title: string;
-  description: string;
-  value: UiScale;
-  current: UiScale;
-  onChange:
-    (value: UiScale) => void;
-}) {
-  const selected =
-    current === value;
-
-  return (
-    <button
-      type="button"
-      className={`ui-scale-option ${
-        selected
-          ? "selected"
-          : ""
-      }`}
-      onClick={() =>
-        onChange(value)
-      }
-    >
-      <span className="ui-scale-preview">
-        Aa
-      </span>
-
-      <div>
-        <strong>
-          {title}
-        </strong>
-
-        <span>
-          {description}
-        </span>
-      </div>
-
-      <span className="ui-scale-check">
-        {selected
-          ? "✓"
-          : ""}
-      </span>
+    <button type="button" className={`gm-nav-item ${active ? "active" : ""}`} onClick={onClick}>
+      <span className="gm-nav-icon">{icon}</span>
+      <span className="gm-nav-text">{label}</span>
+      {badge > 0 && <b className="gm-nav-badge">{badge > 99 ? "99+" : badge}</b>}
     </button>
   );
 }
 
-function LockedPage({
-  title,
+function CleanHome({
+  session,
+  displayName,
+  profile,
+  userGames,
+  gamingDna,
+  lookingFor,
   onLogin,
+  onPlay,
+  onFindMates,
+  onSquads,
+  onMessages,
+  onProfile,
 }: {
-  title: string;
+  session: Session | null;
+  displayName: string;
+  profile: Profile | null;
+  userGames: UserGame[];
+  gamingDna: GamingDnaTag[];
+  lookingFor: LookingForOption[];
   onLogin: () => void;
+  onPlay: () => void;
+  onFindMates: () => void;
+  onSquads: () => void;
+  onMessages: () => void;
+  onProfile: () => void;
 }) {
+  const firstName = displayName.split(" ")[0] || displayName;
+  const primaryGame = userGames.find((game) => game.is_primary) ?? userGames[0] ?? null;
+
   return (
-    <div className="placeholder">
-      <span className="eyebrow">
-        CONNEXION REQUISE
-      </span>
+    <div className="gm-home gm-home-minimal">
+      <section className="gm-hero gm-hero-minimal">
+        <div className="gm-hero-copy">
+          <span className="gm-eyebrow">GAMEMATE</span>
+          <h1>{session ? `Salut ${firstName}.` : "Trouve les bons mates."}</h1>
+          <p>
+            {session
+              ? primaryGame
+                ? `Prêt pour ${prettyValue(primaryGame.gameName)} ?`
+                : "Choisis ce que tu veux faire."
+              : "Connecte-toi pour accéder à ton Companion."}
+          </p>
+          <div className="gm-hero-actions">
+            {session ? (
+              <>
+                <button className="gm-btn primary" type="button" onClick={onPlay}>▶ Jouer maintenant</button>
+                <button className="gm-btn" type="button" onClick={onFindMates}>Trouver des mates</button>
+              </>
+            ) : (
+              <button className="gm-btn primary" type="button" onClick={onLogin}>Se connecter</button>
+            )}
+          </div>
+        </div>
+      </section>
 
-      <h2>
-        {title}
-      </h2>
+      <section className="gm-minimal-actions">
+        <button type="button" onClick={onPlay}>
+          <span>▶</span>
+          <div><strong>Jouer</strong><small>Play Now</small></div>
+        </button>
+        <button type="button" onClick={onFindMates}>
+          <span>⌕</span>
+          <div><strong>Recherche</strong><small>Trouver des mates</small></div>
+        </button>
+        <button type="button" onClick={onSquads}>
+          <span>◇</span>
+          <div><strong>Teams</strong><small>Squads et invitations</small></div>
+        </button>
+      </section>
 
-      <p>
-        Connecte-toi à ton
-        compte GameMate pour
-        continuer.
-      </p>
+      <section className="gm-minimal-content">
+        <article className="gm-card gm-minimal-games">
+          <div className="gm-card-head">
+            <div>
+              <span className="gm-eyebrow">MES JEUX</span>
+              <h2>Bibliothèque</h2>
+            </div>
+            <button type="button" onClick={onProfile}>Gérer</button>
+          </div>
 
-      <button
-        type="button"
-        className="primary locked-login-button"
-        onClick={onLogin}
-      >
-        Se connecter
-      </button>
+          {userGames.length > 0 ? (
+            <div className="gm-minimal-game-list">
+              {userGames.slice(0, 4).map((game, index) => (
+                <button type="button" key={`${game.game_id}-${game.platform_id}`} onClick={onFindMates}>
+                  <span className={`gm-mini-game-art tone-${index % 4}`}>{game.gameName.slice(0, 2).toUpperCase()}</span>
+                  <div>
+                    <strong>{prettyValue(game.gameName)}</strong>
+                    <small>{game.platformName ? prettyValue(game.platformName) : "Plateforme non renseignée"}</small>
+                  </div>
+                  {game.is_primary && <i>Principal</i>}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <EmptyState text="Aucun jeu configuré." action={session ? "Ajouter mes jeux" : undefined} onAction={session ? onProfile : undefined} />
+          )}
+        </article>
+
+        <article className="gm-card gm-minimal-profile">
+          <div className="gm-card-head">
+            <div>
+              <span className="gm-eyebrow">PROFIL</span>
+              <h2>{displayName}</h2>
+            </div>
+            <button type="button" onClick={onProfile}>Ouvrir</button>
+          </div>
+
+          <p>
+            {profile?.bio ||
+              (session
+                ? "Complète ton profil pour améliorer tes recherches."
+                : "Connecte-toi pour afficher ton profil.")}
+          </p>
+
+          {gamingDna.length > 0 && (
+            <div className="gm-tags">
+              {gamingDna.slice(0, 4).map((tag) => <span key={tag.id}>{prettyValue(tag.name)}</span>)}
+            </div>
+          )}
+
+          {lookingFor.length > 0 && (
+            <div className="gm-minimal-looking">
+              <small>Tu recherches</small>
+              <strong>{prettyValue(lookingFor[0].label)}</strong>
+            </div>
+          )}
+
+          <button className="gm-btn full" type="button" onClick={onMessages}>Ouvrir les messages</button>
+        </article>
+      </section>
     </div>
   );
 }
 
-function Placeholder({
+function QuickAction({
+  icon,
   title,
-  description,
+  subtitle,
+  onClick,
 }: {
+  icon: string;
   title: string;
-  description: string;
+  subtitle: string;
+  onClick: () => void;
 }) {
   return (
-    <div className="placeholder">
-      <span className="eyebrow">
-        GAMEMATE COMPANION
-      </span>
+    <button type="button" className="gm-quick-action" onClick={onClick}>
+      <span>{icon}</span>
+      <div>
+        <strong>{title}</strong>
+        <small>{subtitle}</small>
+      </div>
+    </button>
+  );
+}
 
-      <h2>
-        {title}
-      </h2>
-
-      <p>
-        {description}
-      </p>
+function EmptyState({
+  text,
+  action,
+  onAction,
+}: {
+  text: string;
+  action?: string;
+  onAction?: () => void;
+}) {
+  return (
+    <div className="gm-empty">
+      <p>{text}</p>
+      {action && onAction && <button type="button" onClick={onAction}>{action}</button>}
     </div>
   );
 }
 
-function LoginModal({
+function CleanLoginModal({
   email,
   password,
   loading,
@@ -2321,223 +1374,44 @@ function LoginModal({
   password: string;
   loading: boolean;
   error: string;
-  onEmailChange:
-    (value: string) => void;
-  onPasswordChange:
-    (value: string) => void;
+  onEmailChange: (value: string) => void;
+  onPasswordChange: (value: string) => void;
   onClose: () => void;
-  onSubmit:
-    (
-      event:
-        FormEvent<HTMLFormElement>
-    ) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
   return (
-    <div className="companion-login-overlay">
-      <div className="companion-login-modal">
-        <button
-          type="button"
-          className="companion-login-close"
-          onClick={
-            onClose
-          }
-        >
-          ×
+    <div className="gm-modal-backdrop" onMouseDown={onClose}>
+      <form className="gm-login-modal" onMouseDown={(event) => event.stopPropagation()} onSubmit={onSubmit}>
+        <button type="button" className="gm-modal-close" onClick={onClose}>×</button>
+        <img src="/gamemate-logo.png" alt="" />
+        <span className="gm-eyebrow">GAMEMATE</span>
+        <h2>Connexion</h2>
+        <p>Connecte-toi à ton compte GameMate.</p>
+
+        <label>
+          <span>Email</span>
+          <input type="email" value={email} onChange={(event) => onEmailChange(event.target.value)} autoComplete="email" required />
+        </label>
+
+        <label>
+          <span>Mot de passe</span>
+          <input type="password" value={password} onChange={(event) => onPasswordChange(event.target.value)} autoComplete="current-password" required />
+        </label>
+
+        {error && <div className="gm-login-error">{error}</div>}
+
+        <button className="gm-btn primary full" type="submit" disabled={loading}>
+          {loading ? "Connexion..." : "Se connecter"}
         </button>
-
-        <img
-          src="/gamemate-logo.png"
-          alt="GameMate"
-          className="companion-login-logo"
-        />
-
-        <span className="eyebrow">
-          COMPTE GAMEMATE
-        </span>
-
-        <h2>
-          Bienvenue
-        </h2>
-
-        <p>
-          Connecte-toi au
-          même compte que sur
-          le portail GameMate.
-        </p>
-
-        <form
-          className="companion-login-form"
-          onSubmit={
-            onSubmit
-          }
-        >
-          <label>
-            Adresse email
-
-            <input
-              type="email"
-              value={
-                email
-              }
-              required
-              autoComplete="email"
-              onChange={(
-                event
-              ) =>
-                onEmailChange(
-                  event.target
-                    .value
-                )
-              }
-            />
-          </label>
-
-          <label>
-            Mot de passe
-
-            <input
-              type="password"
-              value={
-                password
-              }
-              required
-              autoComplete="current-password"
-              onChange={(
-                event
-              ) =>
-                onPasswordChange(
-                  event.target
-                    .value
-                )
-              }
-            />
-          </label>
-
-          {error && (
-            <div className="companion-login-error">
-              {error}
-            </div>
-          )}
-
-          <button
-            type="submit"
-            className="primary companion-login-submit"
-            disabled={
-              loading
-            }
-          >
-            {loading
-              ? "Connexion..."
-              : "Se connecter"}
-          </button>
-        </form>
-      </div>
+      </form>
     </div>
   );
 }
 
-function shortDay(
-  value: string
-) {
-  const days:
-    Record<
-      string,
-      string
-    > = {
-    Lundi: "Lun",
-    Mardi: "Mar",
-    Mercredi: "Mer",
-    Jeudi: "Jeu",
-    Vendredi: "Ven",
-    Samedi: "Sam",
-    Dimanche: "Dim",
-  };
-
-  return (
-    days[value] ??
-    value
-  );
-}
-
-function prettyValue(
-  value:
-    | string
-    | null
-    | undefined
-) {
-  if (!value) {
-    return "";
-  }
-
-  const normalized =
-    value
-      .trim()
-      .toLowerCase();
-
-  const translations:
-    Record<
-      string,
-      string
-    > = {
-    fr: "Français",
-    french: "Français",
-    france: "France",
-
-    pc: "PC",
-    playstation:
-      "PlayStation",
-    ps5: "PlayStation 5",
-    ps4: "PlayStation 4",
-    xbox: "Xbox",
-    switch:
-      "Nintendo Switch",
-
-    competitive:
-      "Compétitif",
-    chill: "Chill",
-    casual: "Casual",
-    ranked: "Classé",
-    vocal: "Vocal",
-    mic: "Micro",
-
-    duo: "Duo",
-    squad: "Squad",
-    team: "Équipe",
-    friends: "Amis",
-
-    "play-now":
-      "Play Now",
-  };
-
-  if (
-    translations[
-      normalized
-    ]
-  ) {
-    return translations[
-      normalized
-    ];
-  }
-
+function prettyValue(value: string) {
   return value
-    .replace(
-      /[-_]/g,
-      " "
-    )
-    .replace(
-      /\b\w/g,
-      (letter) =>
-        letter.toUpperCase()
-    );
-}
-
-function formatTime(
-  value: string
-) {
-  return value.slice(
-    0,
-    5
-  );
+    .replace(/[_-]+/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 export default App;

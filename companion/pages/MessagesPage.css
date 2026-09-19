@@ -1,0 +1,1470 @@
+/* GameMate — Messages compact V3
+   Fenêtre de messagerie volontairement plus petite et centrée.
+*/
+
+.msg2{
+  position:relative;
+  width:100%;
+  min-height:0;
+  margin:0;
+  padding:0;
+  color:#f7f9ff;
+}
+
+.msg2 *{box-sizing:border-box}
+
+.msg2-grid,
+.msg2-orb{
+  display:none;
+}
+
+.msg2-kicker{
+  color:#7184ad;
+  font-size:5px;
+  font-weight:900;
+  letter-spacing:.15em;
+}
+
+/* Petit titre au-dessus de la fenêtre */
+.msg2-header{
+  width:min(920px,calc(100vw - 330px));
+  height:34px;
+  margin:0 auto 6px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+}
+
+.msg2-header-left{
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+
+.msg2-header h1{
+  margin:0;
+  font-size:20px;
+  line-height:1;
+  letter-spacing:-.04em;
+}
+
+.msg2-header-right{
+  display:flex;
+  align-items:center;
+  gap:5px;
+}
+
+.msg2-header-label{
+  color:#667aa1;
+  font-size:4.8px;
+  font-weight:800;
+}
+
+.msg2-header-count{
+  display:grid;
+  min-width:20px;
+  height:20px;
+  place-items:center;
+  border:1px solid rgba(134,120,255,.17);
+  border-radius:999px;
+  padding:0 5px;
+  background:rgba(100,78,220,.10);
+  color:#d8d3ff;
+  font-size:6px;
+}
+
+/* LA vraie différence : largeur/hauteur limitées */
+.msg2-layout{
+  display:grid;
+  grid-template-columns:230px minmax(0,1fr);
+  width:min(920px,calc(100vw - 330px));
+  height:min(500px,calc(100vh - 185px));
+  min-height:420px;
+  max-height:500px;
+  margin:0 auto;
+  overflow:hidden;
+  border:1px solid rgba(128,149,255,.12);
+  border-radius:13px;
+  background:rgba(15,27,63,.78);
+  box-shadow:0 14px 38px rgba(4,9,32,.16);
+  backdrop-filter:blur(14px);
+}
+
+.msg2-list{
+  display:flex;
+  min-width:0;
+  min-height:0;
+  flex-direction:column;
+  border-right:1px solid rgba(255,255,255,.045);
+  background:rgba(18,33,72,.42);
+}
+
+.msg2-list-head{
+  padding:6px;
+  border-bottom:1px solid rgba(255,255,255,.035);
+}
+
+.msg2-search{
+  display:flex;
+  height:28px;
+  align-items:center;
+  gap:5px;
+  border:1px solid rgba(139,158,255,.08);
+  border-radius:7px;
+  padding:0 7px;
+  background:rgba(35,49,105,.16);
+  color:#7890b8;
+}
+
+.msg2-search span{
+  font-size:7px;
+}
+
+.msg2-search input{
+  min-width:0;
+  flex:1;
+  border:0;
+  outline:0;
+  background:transparent;
+  color:white;
+  font-size:5.6px;
+}
+
+.msg2-search input::placeholder{
+  color:#5b6e94;
+}
+
+.msg2-list-body{
+  flex:1;
+  min-height:0;
+  overflow-y:auto;
+  padding:3px;
+}
+
+.msg2-conversation{
+  display:grid;
+  width:100%;
+  min-height:58px;
+  grid-template-columns:28px minmax(0,1fr) auto;
+  align-items:center;
+  gap:6px;
+  border:1px solid transparent;
+  border-radius:8px;
+  padding:5px;
+  background:transparent;
+  color:#edf2ff;
+  text-align:left;
+  cursor:pointer;
+  transition:120ms ease;
+}
+
+.msg2-conversation:hover{
+  background:rgba(66,76,157,.10);
+}
+
+.msg2-conversation.active{
+  border-color:rgba(118,103,255,.18);
+  background:linear-gradient(90deg,rgba(85,76,207,.18),rgba(42,118,169,.08));
+  box-shadow:inset 2px 0 0 #816fff;
+}
+
+.msg2-avatar{
+  display:grid;
+  place-items:center;
+  overflow:hidden;
+  flex:0 0 auto;
+  border:1px solid rgba(147,134,255,.18);
+  background:linear-gradient(135deg,#4654b4,#287e9d);
+  font-weight:900;
+}
+
+.msg2-avatar img{
+  width:100%;
+  height:100%;
+  object-fit:cover;
+}
+
+.msg2-avatar.small{
+  width:34px;
+  height:34px;
+  border-radius:7px;
+  font-size:7px;
+}
+
+.msg2-avatar.medium{
+  width:34px;
+  height:34px;
+  border-radius:7px;
+  font-size:7px;
+}
+
+.msg2-avatar.large{
+  width:56px;
+  height:56px;
+  border-radius:12px;
+  font-size:14px;
+}
+
+.msg2-conversation-copy{
+  display:flex;
+  min-width:0;
+  flex-direction:column;
+  gap:2px;
+}
+
+.msg2-conversation-top{
+  display:flex;
+  min-width:0;
+  align-items:center;
+  justify-content:space-between;
+  gap:4px;
+}
+
+.msg2-conversation-top strong{
+  overflow:hidden;
+  font-size:5.9px;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+
+.msg2-conversation-top small{
+  color:#62769f;
+  font-size:4px;
+  white-space:nowrap;
+}
+
+.msg2-conversation-preview{
+  overflow:hidden;
+  color:#7084ab;
+  font-size:4.6px;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+
+.msg2-conversation-preview i{
+  color:#8e9fc0;
+  font-style:normal;
+}
+
+.msg2-unread{
+  display:grid;
+  min-width:14px;
+  height:14px;
+  place-items:center;
+  border-radius:999px;
+  padding:0 4px;
+  background:linear-gradient(135deg,#ff4ea7,#8d5cff);
+  color:white;
+  font-size:4px;
+  font-weight:900;
+}
+
+.msg2-thread{
+  display:flex;
+  min-width:0;
+  min-height:0;
+  flex-direction:column;
+  background:rgba(12,23,55,.24);
+}
+
+.msg2-thread-head{
+  display:grid;
+  min-height:50px;
+  grid-template-columns:auto minmax(0,1fr) auto;
+  align-items:center;
+  gap:6px;
+  border-bottom:1px solid rgba(255,255,255,.04);
+  padding:5px 7px;
+  background:rgba(17,31,70,.28);
+}
+
+.msg2-mobile-back{
+  display:none;
+}
+
+.msg2-thread-person{
+  display:flex;
+  min-width:0;
+  flex-direction:column;
+  gap:1px;
+  border:0;
+  background:transparent;
+  color:white;
+  text-align:left;
+  cursor:pointer;
+}
+
+.msg2-thread-person strong{
+  overflow:hidden;
+  font-size:7.4px;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+
+.msg2-thread-person span{
+  overflow:hidden;
+  color:#7084aa;
+  font-size:5.4px;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+
+.msg2-thread-actions{
+  display:flex;
+  gap:3px;
+}
+
+.msg2-thread-actions button{
+  display:grid;
+  width:36px;
+  height:36px;
+  place-items:center;
+  border:1px solid rgba(137,155,255,.07);
+  border-radius:6px;
+  background:rgba(42,55,114,.09);
+  color:#93a4c5;
+  font-size:6px;
+  cursor:pointer;
+}
+
+.msg2-thread-actions button:hover:not(:disabled){
+  border-color:rgba(120,105,255,.20);
+  color:white;
+}
+
+.msg2-thread-actions button:disabled{
+  cursor:not-allowed;
+  opacity:.30;
+}
+
+.msg2-thread-body{
+  position:relative;
+  flex:1;
+  min-height:0;
+  overflow-y:auto;
+  padding:10px 12px;
+}
+
+.msg2-thread-empty{
+  display:flex;
+  flex:1;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  text-align:center;
+}
+
+.msg2-empty-logo{
+  display:grid;
+  width:50px;
+  height:50px;
+  place-items:center;
+  margin-bottom:7px;
+  border:1px solid rgba(123,111,255,.11);
+  border-radius:13px;
+  background:rgba(91,75,255,.045);
+}
+
+.msg2-empty-logo img{
+  width:38px;
+  height:38px;
+  object-fit:contain;
+  filter:drop-shadow(0 0 12px rgba(103,90,255,.25));
+}
+
+.msg2-thread-empty h2{
+  margin:4px 0 0;
+  font-size:12px;
+  letter-spacing:-.03em;
+}
+
+.msg2-thread-empty p{
+  max-width:290px;
+  margin:4px 0 0;
+  color:#7589b0;
+  font-size:5px;
+  line-height:1.4;
+}
+
+.msg2-list-state,
+.msg2-thread-state{
+  display:flex;
+  min-height:130px;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:5px;
+  color:#7185ac;
+  text-align:center;
+}
+
+.msg2-list-state strong{
+  font-size:5.8px;
+}
+
+.msg2-list-state small{
+  max-width:160px;
+  font-size:4.7px;
+  line-height:1.35;
+}
+
+.msg2-empty-icon{
+  display:grid;
+  width:31px;
+  height:31px;
+  place-items:center;
+  border:1px solid rgba(122,111,255,.11);
+  border-radius:9px;
+  background:rgba(91,76,255,.05);
+  color:#aaa0ff;
+  font-size:11px;
+}
+
+.msg2-chat-avatar{
+  margin-bottom:6px;
+}
+
+.msg2-thread-state h2{
+  margin:4px 0 0;
+  color:#eef2ff;
+  font-size:11px;
+}
+
+.msg2-thread-state p{
+  margin:0;
+  color:#7185ac;
+  font-size:4.8px;
+}
+
+.msg2-message-flow{
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+  min-height:100%;
+  justify-content:flex-end;
+}
+
+.msg2-message-row{
+  display:flex;
+  flex-direction:column;
+  align-items:flex-start;
+  padding-top:1px;
+}
+
+.msg2-message-row.mine{
+  align-items:flex-end;
+}
+
+.msg2-time-divider{
+  align-self:center;
+  margin:4px 0 3px;
+  color:#5f739c;
+  font-size:4px;
+}
+
+.msg2-bubble{
+  max-width:min(64%,460px);
+  border:1px solid rgba(137,155,255,.06);
+  border-radius:9px 9px 9px 3px;
+  padding:7px 9px 6px;
+  background:rgba(42,57,119,.16);
+  color:#e8edff;
+}
+
+.msg2-message-row.mine .msg2-bubble{
+  border-color:rgba(95,125,255,.13);
+  border-radius:9px 9px 3px 9px;
+  background:linear-gradient(135deg,rgba(77,91,224,.44),rgba(86,62,186,.36));
+}
+
+.msg2-bubble p{
+  margin:0;
+  white-space:pre-wrap;
+  word-break:break-word;
+  font-size:6.6px;
+  line-height:1.35;
+}
+
+.msg2-bubble small{
+  display:block;
+  margin-top:2px;
+  color:#6f83aa;
+  font-size:3.8px;
+  text-align:right;
+}
+
+.msg2-message-row.mine .msg2-bubble small{
+  color:rgba(223,229,255,.54);
+}
+
+.msg2-composer{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) 36px;
+  gap:5px;
+  border-top:1px solid rgba(255,255,255,.04);
+  padding:7px 8px;
+  background:rgba(15,29,67,.38);
+}
+
+.msg2-composer textarea{
+  width:100%;
+  min-height:36px;
+  max-height:96px;
+  resize:none;
+  border:1px solid rgba(138,157,255,.08);
+  border-radius:7px;
+  outline:0;
+  padding:7px;
+  background:rgba(35,49,105,.16);
+  color:white;
+  font:inherit;
+  font-size:5.3px;
+  line-height:1.25;
+}
+
+.msg2-composer textarea::placeholder{
+  color:#60739b;
+}
+
+.msg2-composer textarea:focus{
+  border-color:rgba(119,104,255,.21);
+  box-shadow:0 0 0 2px rgba(101,86,255,.035);
+}
+
+.msg2-send{
+  display:grid;
+  width:36px;
+  height:36px;
+  place-items:center;
+  border:1px solid rgba(255,255,255,.10);
+  border-radius:7px;
+  background:linear-gradient(135deg,#596bff,#8658f2 55%,#20b9d7);
+  color:white;
+  cursor:pointer;
+}
+
+.msg2-send:disabled{
+  cursor:not-allowed;
+  opacity:.38;
+}
+
+.msg2-error{
+  margin-bottom:5px;
+  border:1px solid rgba(255,91,122,.12);
+  border-radius:6px;
+  padding:7px 8px;
+  background:rgba(255,58,92,.045);
+  color:#ffadbb;
+  font-size:4.8px;
+}
+
+.msg2-loader{
+  width:24px;
+  height:24px;
+  border:2px solid rgba(119,143,255,.09);
+  border-top-color:#796dff;
+  border-right-color:#4bc9e6;
+  border-radius:50%;
+  animation:msg2Spin .8s linear infinite;
+}
+
+@keyframes msg2Spin{
+  to{transform:rotate(360deg)}
+}
+
+.msg2-locked{
+  width:min(920px,calc(100vw - 330px));
+  min-height:420px;
+  margin:0 auto;
+  display:grid;
+  place-items:center;
+  overflow:hidden;
+  border:1px solid rgba(124,145,255,.10);
+  border-radius:13px;
+  background:rgba(19,33,75,.48);
+}
+
+.msg2-lock-content{
+  max-width:460px;
+  padding:22px;
+  text-align:center;
+}
+
+.msg2-lock-content h1{
+  margin:6px 0 0;
+  font-size:27px;
+  letter-spacing:-.05em;
+}
+
+.msg2-lock-content p{
+  margin:7px auto 12px;
+  color:#91a4c9;
+  font-size:6.2px;
+  line-height:1.45;
+}
+
+.msg2-primary{
+  min-height:32px;
+  border:0;
+  border-radius:8px;
+  padding:0 11px;
+  background:linear-gradient(90deg,#596cff,#8757f4,#18bad7);
+  color:white;
+  font-size:6px;
+  font-weight:850;
+  cursor:pointer;
+}
+
+.msg2-lock-orb{
+  display:none;
+}
+
+/* taille intermédiaire */
+@media(max-width:1180px){
+  .msg2-header,
+  .msg2-layout,
+  .msg2-locked{
+    width:min(840px,calc(100vw - 285px));
+  }
+
+  .msg2-layout{
+    grid-template-columns:190px minmax(0,1fr);
+  }
+}
+
+/* mobile */
+@media(max-width:680px){
+  .msg2-header{
+    width:100%;
+    height:31px;
+    margin-bottom:4px;
+  }
+
+  .msg2-header h1{
+    font-size:14px;
+  }
+
+  .msg2-header-label{
+    display:none;
+  }
+
+  .msg2-layout,
+  .msg2-locked{
+    width:100%;
+  }
+
+  .msg2-layout{
+    display:block;
+    height:calc(100vh - 108px);
+    min-height:420px;
+    max-height:none;
+  }
+
+  .msg2-list{
+    height:100%;
+    border-right:0;
+  }
+
+  .msg2-list.has-selection{
+    display:none;
+  }
+
+  .msg2-thread{
+    display:none;
+    height:100%;
+  }
+
+  .msg2-thread.active{
+    display:flex;
+  }
+
+  .msg2-mobile-back{
+    display:grid;
+    width:25px;
+    height:25px;
+    place-items:center;
+    border:1px solid rgba(137,155,255,.07);
+    border-radius:7px;
+    background:rgba(42,55,114,.09);
+    color:#99a9c7;
+  }
+
+  .msg2-thread-head{
+    grid-template-columns:auto auto minmax(0,1fr) auto;
+  }
+}
+
+@media(max-width:480px){
+  .msg2-layout{
+    border-radius:10px;
+  }
+
+  .msg2-thread-body{
+    padding:6px;
+  }
+
+  .msg2-bubble{
+    max-width:84%;
+  }
+}
+
+
+/* V4 readability boost: compact window, larger content */
+.msg2-conversation-top strong{font-size:7.2px}
+.msg2-conversation-preview{font-size:5.7px}
+.msg2-conversation-top small{font-size:4.9px}
+
+.msg2-thread-person strong{font-size:7.6px}
+.msg2-thread-person span{font-size:5.5px}
+
+.msg2-bubble p{font-size:6.8px;line-height:1.45}
+.msg2-bubble small{font-size:4.8px}
+
+.msg2-time-divider{font-size:5px}
+
+.msg2-composer textarea{
+  font-size:6.6px;
+  line-height:1.4;
+  padding:9px 10px;
+}
+
+.msg2-search input{font-size:6.4px}
+
+.msg2-kicker{font-size:5.7px}
+
+.msg2-header-label{font-size:5.4px}
+.msg2-header-count{font-size:6.8px}
+
+.msg2-list-state strong{font-size:6.6px}
+.msg2-list-state small{font-size:5.5px}
+.msg2-thread-state p{font-size:5.5px}
+
+.msg2-thread-empty h2{font-size:14px}
+.msg2-thread-empty p{font-size:5.8px}
+
+.msg2-send span{font-size:11px}
+
+
+/* =========================================================
+   V5 — GROS CONTENU, FENÊTRE TOUJOURS COMPACTE
+   ========================================================= */
+
+.msg2-header{
+  width:min(1040px,calc(100vw - 330px));
+  height:48px;
+  margin-bottom:8px;
+}
+
+.msg2-header h1{
+  font-size:28px !important;
+}
+
+.msg2-kicker{
+  font-size:8px !important;
+  letter-spacing:.15em;
+}
+
+.msg2-header-label{
+  font-size:7px !important;
+}
+
+.msg2-header-count{
+  min-width:28px;
+  height:28px;
+  font-size:9px !important;
+}
+
+/* Fenêtre légèrement plus grande, mais pas plein écran */
+.msg2-layout{
+  grid-template-columns:300px minmax(0,1fr) !important;
+  width:min(1040px,calc(100vw - 330px)) !important;
+  height:min(570px,calc(100vh - 175px)) !important;
+  min-height:500px !important;
+  max-height:570px !important;
+  border-radius:16px;
+}
+
+/* Recherche */
+.msg2-list-head{
+  padding:10px !important;
+}
+
+.msg2-search{
+  height:42px !important;
+  gap:8px;
+  border-radius:10px;
+  padding:0 11px;
+}
+
+.msg2-search span{
+  font-size:11px !important;
+}
+
+.msg2-search input{
+  font-size:9px !important;
+}
+
+/* Conversations à gauche */
+.msg2-list-body{
+  padding:6px !important;
+}
+
+.msg2-conversation{
+  min-height:74px !important;
+  grid-template-columns:46px minmax(0,1fr) auto !important;
+  gap:10px !important;
+  border-radius:11px;
+  padding:9px 10px !important;
+}
+
+.msg2-avatar.small{
+  width:46px !important;
+  height:46px !important;
+  border-radius:11px !important;
+  font-size:13px !important;
+}
+
+.msg2-avatar.medium{
+  width:46px !important;
+  height:46px !important;
+  border-radius:11px !important;
+  font-size:13px !important;
+}
+
+.msg2-avatar.large{
+  width:76px !important;
+  height:76px !important;
+  border-radius:18px !important;
+  font-size:22px !important;
+}
+
+.msg2-conversation-copy{
+  gap:5px !important;
+}
+
+.msg2-conversation-top strong{
+  font-size:10.5px !important;
+}
+
+.msg2-conversation-top small{
+  font-size:7px !important;
+}
+
+.msg2-conversation-preview{
+  font-size:8.5px !important;
+}
+
+.msg2-unread{
+  min-width:22px !important;
+  height:22px !important;
+  padding:0 6px !important;
+  font-size:7px !important;
+}
+
+/* En-tête de la conversation */
+.msg2-thread-head{
+  min-height:66px !important;
+  gap:10px !important;
+  padding:9px 12px !important;
+}
+
+.msg2-thread-person{
+  gap:3px !important;
+}
+
+.msg2-thread-person strong{
+  font-size:11px !important;
+}
+
+.msg2-thread-person span{
+  font-size:8px !important;
+}
+
+.msg2-thread-actions{
+  gap:6px !important;
+}
+
+.msg2-thread-actions button{
+  width:38px !important;
+  height:38px !important;
+  border-radius:10px !important;
+  font-size:10px !important;
+}
+
+/* Zone de discussion */
+.msg2-thread-body{
+  padding:14px 16px !important;
+}
+
+.msg2-message-flow{
+  gap:5px !important;
+}
+
+.msg2-time-divider{
+  margin:8px 0 6px !important;
+  font-size:7px !important;
+}
+
+.msg2-bubble{
+  max-width:min(72%,600px) !important;
+  border-radius:14px 14px 14px 5px !important;
+  padding:10px 12px 8px !important;
+}
+
+.msg2-message-row.mine .msg2-bubble{
+  border-radius:14px 14px 5px 14px !important;
+}
+
+.msg2-bubble p{
+  font-size:10px !important;
+  line-height:1.5 !important;
+}
+
+.msg2-bubble small{
+  margin-top:5px !important;
+  font-size:7px !important;
+}
+
+/* Zone de saisie */
+.msg2-composer{
+  grid-template-columns:minmax(0,1fr) 50px !important;
+  gap:8px !important;
+  padding:10px 12px !important;
+}
+
+.msg2-composer textarea{
+  min-height:50px !important;
+  max-height:120px !important;
+  border-radius:11px !important;
+  padding:14px !important;
+  font-size:10px !important;
+  line-height:1.4 !important;
+}
+
+.msg2-send{
+  width:50px !important;
+  height:50px !important;
+  border-radius:11px !important;
+}
+
+.msg2-send span{
+  font-size:17px !important;
+}
+
+/* État vide */
+.msg2-empty-logo{
+  width:82px !important;
+  height:82px !important;
+  border-radius:21px !important;
+  margin-bottom:14px !important;
+}
+
+.msg2-empty-logo img{
+  width:62px !important;
+  height:62px !important;
+}
+
+.msg2-thread-empty h2{
+  font-size:20px !important;
+}
+
+.msg2-thread-empty p{
+  max-width:420px !important;
+  font-size:9px !important;
+  line-height:1.55 !important;
+}
+
+.msg2-list-state,
+.msg2-thread-state{
+  gap:10px !important;
+}
+
+.msg2-list-state strong{
+  font-size:9px !important;
+}
+
+.msg2-list-state small{
+  max-width:220px !important;
+  font-size:8px !important;
+  line-height:1.45 !important;
+}
+
+.msg2-empty-icon{
+  width:50px !important;
+  height:50px !important;
+  border-radius:14px !important;
+  font-size:17px !important;
+}
+
+.msg2-thread-state h2{
+  font-size:18px !important;
+}
+
+.msg2-thread-state p{
+  font-size:8px !important;
+}
+
+.msg2-error{
+  padding:9px 11px !important;
+  font-size:8px !important;
+}
+
+.msg2-loader{
+  width:34px !important;
+  height:34px !important;
+}
+
+/* Taille intermédiaire */
+@media(max-width:1180px){
+  .msg2-header,
+  .msg2-layout,
+  .msg2-locked{
+    width:min(940px,calc(100vw - 285px)) !important;
+  }
+
+  .msg2-layout{
+    grid-template-columns:270px minmax(0,1fr) !important;
+  }
+}
+
+/* Mobile */
+@media(max-width:680px){
+  .msg2-header{
+    width:100% !important;
+    height:42px !important;
+  }
+
+  .msg2-header h1{
+    font-size:22px !important;
+  }
+
+  .msg2-layout,
+  .msg2-locked{
+    width:100% !important;
+  }
+
+  .msg2-layout{
+    display:block !important;
+    height:calc(100vh - 108px) !important;
+    min-height:440px !important;
+    max-height:none !important;
+  }
+
+  .msg2-conversation{
+    min-height:68px !important;
+  }
+
+  .msg2-bubble{
+    max-width:86% !important;
+  }
+
+  .msg2-mobile-back{
+    width:38px !important;
+    height:38px !important;
+    font-size:13px !important;
+  }
+}
+
+
+/* =========================================================
+   V6 — grande box sur toute la zone, contenu interne V5 conservé
+   ========================================================= */
+
+.msg2{
+  width:100% !important;
+  min-height:100% !important;
+  padding:0 0 12px !important;
+}
+
+.msg2-header{
+  width:100% !important;
+  max-width:none !important;
+  margin:0 0 8px !important;
+  padding:0 8px !important;
+}
+
+.msg2-layout{
+  width:100% !important;
+  max-width:none !important;
+  height:calc(100vh - 165px) !important;
+  min-height:540px !important;
+  max-height:none !important;
+  margin:0 !important;
+  grid-template-columns:300px minmax(0,1fr) !important;
+  border-radius:16px !important;
+}
+
+/* Sur les tailles intermédiaires, on garde aussi la box en pleine largeur */
+@media(max-width:1180px){
+  .msg2-header,
+  .msg2-layout,
+  .msg2-locked{
+    width:100% !important;
+    max-width:none !important;
+  }
+
+  .msg2-layout{
+    grid-template-columns:270px minmax(0,1fr) !important;
+  }
+}
+
+/* Mobile : comportement existant */
+@media(max-width:680px){
+  .msg2-layout{
+    height:calc(100vh - 108px) !important;
+    min-height:440px !important;
+  }
+}
+
+
+/* =========================================================
+   V7 — Messages entièrement contenu dans la fenêtre
+   Pas de scroll vertical de page.
+   Les scrolls restent uniquement dans la liste et la conversation.
+   ========================================================= */
+
+.msg2{
+  width:100% !important;
+  height:calc(100vh - 88px) !important;
+  min-height:0 !important;
+  max-height:calc(100vh - 88px) !important;
+  overflow:hidden !important;
+  padding:0 !important;
+  margin:0 !important;
+  display:flex !important;
+  flex-direction:column !important;
+}
+
+.msg2-header{
+  flex:0 0 48px !important;
+  width:100% !important;
+  height:48px !important;
+  margin:0 !important;
+  padding:0 8px !important;
+}
+
+.msg2-layout{
+  flex:1 1 auto !important;
+  width:100% !important;
+  height:auto !important;
+  min-height:0 !important;
+  max-height:none !important;
+  margin:0 !important;
+  overflow:hidden !important;
+  grid-template-columns:300px minmax(0,1fr) !important;
+}
+
+/* Très important : les enfants doivent pouvoir rétrécir
+   sans forcer la page entière à scroller */
+.msg2-list,
+.msg2-thread,
+.msg2-list-body,
+.msg2-thread-body{
+  min-height:0 !important;
+}
+
+.msg2-list{
+  overflow:hidden !important;
+}
+
+.msg2-thread{
+  overflow:hidden !important;
+}
+
+.msg2-list-body{
+  overflow-y:auto !important;
+  overscroll-behavior:contain;
+}
+
+.msg2-thread-body{
+  overflow-y:auto !important;
+  overscroll-behavior:contain;
+}
+
+/* Le header conversation et le champ d'écriture restent toujours visibles */
+.msg2-thread-head{
+  flex:0 0 auto !important;
+}
+
+.msg2-composer{
+  flex:0 0 auto !important;
+}
+
+/* Évite qu'un état vide dépasse */
+.msg2-thread-empty{
+  min-height:0 !important;
+  overflow:hidden !important;
+}
+
+@media(max-width:1180px){
+  .msg2{
+    height:calc(100vh - 82px) !important;
+    max-height:calc(100vh - 82px) !important;
+  }
+
+  .msg2-layout{
+    grid-template-columns:270px minmax(0,1fr) !important;
+  }
+}
+
+@media(max-width:680px){
+  .msg2{
+    height:calc(100vh - 58px) !important;
+    max-height:calc(100vh - 58px) !important;
+  }
+
+  .msg2-header{
+    flex-basis:42px !important;
+    height:42px !important;
+  }
+
+  .msg2-layout{
+    height:auto !important;
+    min-height:0 !important;
+  }
+}
+
+
+/* =========================================================
+   V8 — box plus petite, contenu toujours gros
+   ========================================================= */
+
+.msg2{
+  width:100% !important;
+  height:calc(100vh - 88px) !important;
+  min-height:0 !important;
+  max-height:calc(100vh - 88px) !important;
+  overflow:hidden !important;
+  display:flex !important;
+  flex-direction:column !important;
+  align-items:center !important;
+  padding:0 !important;
+}
+
+/* Petit header aligné avec la box */
+.msg2-header{
+  width:min(1080px,calc(100% - 80px)) !important;
+  max-width:1080px !important;
+  flex:0 0 48px !important;
+  height:48px !important;
+  margin:0 auto 8px !important;
+  padding:0 4px !important;
+}
+
+/* Box réellement plus petite */
+.msg2-layout{
+  width:min(1080px,calc(100% - 80px)) !important;
+  max-width:1080px !important;
+
+  height:min(510px,calc(100vh - 170px)) !important;
+  min-height:460px !important;
+  max-height:510px !important;
+
+  flex:0 1 auto !important;
+  margin:0 auto !important;
+
+  grid-template-columns:290px minmax(0,1fr) !important;
+
+  border-radius:16px !important;
+  overflow:hidden !important;
+}
+
+/* Pas de scroll de page : uniquement à l'intérieur */
+.msg2-list,
+.msg2-thread{
+  min-height:0 !important;
+  overflow:hidden !important;
+}
+
+.msg2-list-body,
+.msg2-thread-body{
+  min-height:0 !important;
+  overflow-y:auto !important;
+  overscroll-behavior:contain !important;
+}
+
+/* Écrans un peu plus petits */
+@media(max-width:1250px){
+  .msg2-header,
+  .msg2-layout,
+  .msg2-locked{
+    width:min(980px,calc(100% - 50px)) !important;
+    max-width:980px !important;
+  }
+
+  .msg2-layout{
+    grid-template-columns:270px minmax(0,1fr) !important;
+    height:min(500px,calc(100vh - 160px)) !important;
+  }
+}
+
+/* Mobile */
+@media(max-width:680px){
+  .msg2{
+    height:calc(100vh - 58px) !important;
+    max-height:calc(100vh - 58px) !important;
+  }
+
+  .msg2-header,
+  .msg2-layout,
+  .msg2-locked{
+    width:100% !important;
+    max-width:none !important;
+  }
+
+  .msg2-header{
+    flex-basis:42px !important;
+    height:42px !important;
+    margin-bottom:4px !important;
+  }
+
+  .msg2-layout{
+    display:block !important;
+    height:calc(100vh - 108px) !important;
+    min-height:420px !important;
+    max-height:none !important;
+  }
+}
+
+
+/* =========================================================
+   V9 — la messagerie remplit toute la zone centrale disponible
+   sans faire scroller la page entière.
+   Le contenu interne garde les grosses tailles de la V5/V8.
+   ========================================================= */
+
+/* Quand Messages est affiché, le conteneur principal ne scrolle plus. */
+.content:has(.msg2){
+  overflow:hidden !important;
+  padding-bottom:22px !important;
+}
+
+/* La page Messages prend exactement la hauteur disponible du .content. */
+.content:has(.msg2) .msg2{
+  width:100% !important;
+  height:100% !important;
+  min-height:0 !important;
+  max-height:none !important;
+  margin:0 !important;
+  padding:0 !important;
+  display:flex !important;
+  flex-direction:column !important;
+  align-items:stretch !important;
+  overflow:hidden !important;
+}
+
+/* Le bandeau Messages prend toute la largeur utile. */
+.content:has(.msg2) .msg2-header{
+  width:100% !important;
+  max-width:none !important;
+  flex:0 0 48px !important;
+  height:48px !important;
+  margin:0 0 8px !important;
+  padding:0 6px !important;
+}
+
+/* La box remplit tout l'espace restant, sans dépasser. */
+.content:has(.msg2) .msg2-layout{
+  width:100% !important;
+  max-width:none !important;
+  height:auto !important;
+  min-height:0 !important;
+  max-height:none !important;
+  flex:1 1 auto !important;
+  margin:0 !important;
+  grid-template-columns:300px minmax(0,1fr) !important;
+  overflow:hidden !important;
+}
+
+/* Les seules zones qui scrollent sont les vraies zones de contenu. */
+.content:has(.msg2) .msg2-list,
+.content:has(.msg2) .msg2-thread{
+  min-height:0 !important;
+  overflow:hidden !important;
+}
+
+.content:has(.msg2) .msg2-list-body,
+.content:has(.msg2) .msg2-thread-body{
+  min-height:0 !important;
+  overflow-y:auto !important;
+  overscroll-behavior:contain !important;
+}
+
+/* Header conversation + saisie toujours visibles. */
+.content:has(.msg2) .msg2-thread-head,
+.content:has(.msg2) .msg2-composer{
+  flex:0 0 auto !important;
+}
+
+/* Écrans intermédiaires */
+@media(max-width:1180px){
+  .content:has(.msg2) .msg2-layout{
+    grid-template-columns:270px minmax(0,1fr) !important;
+  }
+}
+
+/* Mobile */
+@media(max-width:680px){
+  .content:has(.msg2){
+    padding:14px !important;
+  }
+
+  .content:has(.msg2) .msg2-header{
+    flex-basis:42px !important;
+    height:42px !important;
+    margin-bottom:4px !important;
+  }
+
+  .content:has(.msg2) .msg2-layout{
+    display:block !important;
+  }
+}
+
+
+/* =========================================================
+   V10 — messages plus gros, reste de l'interface inchangé
+   ========================================================= */
+
+.msg2-message-flow{
+  gap:7px !important;
+}
+
+.msg2-time-divider{
+  margin:10px 0 7px !important;
+  font-size:8px !important;
+}
+
+.msg2-bubble{
+  max-width:min(76%,680px) !important;
+  border-radius:16px 16px 16px 6px !important;
+  padding:13px 15px 10px !important;
+}
+
+.msg2-message-row.mine .msg2-bubble{
+  border-radius:16px 16px 6px 16px !important;
+}
+
+.msg2-bubble p{
+  font-size:12px !important;
+  line-height:1.55 !important;
+}
+
+.msg2-bubble small{
+  margin-top:6px !important;
+  font-size:8px !important;
+}
+
+@media(max-width:680px){
+  .msg2-bubble{
+    max-width:88% !important;
+  }
+
+  .msg2-bubble p{
+    font-size:11px !important;
+  }
+
+  .msg2-bubble small{
+    font-size:7px !important;
+  }
+}
