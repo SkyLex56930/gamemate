@@ -10,10 +10,16 @@ type CompanionStatus = {
   path: string | null;
 };
 
+type UpdateStatus = {
+  latest_version: string;
+  update_available: boolean;
+};
+
 type LauncherState =
   | "checking"
   | "ready"
   | "installing"
+  | "updating"
   | "launching"
   | "error";
 
@@ -27,6 +33,8 @@ function App() {
     useState<LauncherState>("checking");
   const [companion, setCompanion] =
     useState<CompanionStatus>(EMPTY_STATUS);
+  const [updateStatus, setUpdateStatus] =
+    useState<UpdateStatus | null>(null);
   const [message, setMessage] = useState(
     "Vérification de GameMate Companion...",
   );
@@ -44,12 +52,37 @@ function App() {
         await invoke<CompanionStatus>("companion_status");
 
       setCompanion(status);
-      setLauncherState("ready");
-      setMessage(
-        status.installed
-          ? "GameMate Companion est installé sur ce PC."
-          : "GameMate Companion n’est pas encore installé.",
-      );
+
+      try {
+        const latest =
+          await invoke<UpdateStatus>("check_for_updates");
+
+        setUpdateStatus(latest);
+        setLauncherState("ready");
+
+        if (!status.installed) {
+          setMessage(
+            `GameMate Companion n’est pas encore installé. Dernière version : ${latest.latest_version}.`,
+          );
+        } else if (latest.update_available) {
+          setMessage(
+            `Une mise à jour est disponible : ${latest.latest_version}.`,
+          );
+        } else {
+          setMessage(
+            `GameMate Companion est à jour (${latest.latest_version}).`,
+          );
+        }
+      } catch (updateError) {
+        console.error(updateError);
+        setUpdateStatus(null);
+        setLauncherState("ready");
+        setMessage(
+          status.installed
+            ? "GameMate Companion est installé. Impossible de vérifier les mises à jour pour le moment."
+            : "GameMate Companion n’est pas encore installé.",
+        );
+      }
     } catch (error) {
       console.error(error);
       setLauncherState("error");
@@ -89,6 +122,41 @@ function App() {
     }
   }
 
+  async function updateCompanion() {
+    if (launcherState === "updating") return;
+
+    setLauncherState("updating");
+    setMessage(
+      `Téléchargement de la mise à jour ${
+        updateStatus?.latest_version ?? ""
+      }...`,
+    );
+
+    try {
+      const status =
+        await invoke<CompanionStatus>("update_companion");
+
+      setCompanion(status);
+
+      const latest =
+        await invoke<UpdateStatus>("check_for_updates");
+
+      setUpdateStatus(latest);
+      setLauncherState("ready");
+      setMessage(
+        `Mise à jour terminée. GameMate Companion ${latest.latest_version} est à jour.`,
+      );
+    } catch (error) {
+      console.error(error);
+      setLauncherState("error");
+      setMessage(
+        typeof error === "string"
+          ? error
+          : "Impossible de mettre GameMate Companion à jour.",
+      );
+    }
+  }
+
   async function launchCompanion() {
     if (launcherState === "launching") return;
 
@@ -119,6 +187,7 @@ function App() {
     if (
       launcherState === "checking" ||
       launcherState === "installing" ||
+      launcherState === "updating" ||
       launcherState === "launching"
     ) {
       return;
@@ -129,6 +198,27 @@ function App() {
     } else {
       await installCompanion();
     }
+  }
+
+  async function handleSecondaryAction() {
+    if (
+      launcherState === "checking" ||
+      launcherState === "installing" ||
+      launcherState === "updating" ||
+      launcherState === "launching"
+    ) {
+      return;
+    }
+
+    if (
+      companion.installed &&
+      updateStatus?.update_available
+    ) {
+      await updateCompanion();
+      return;
+    }
+
+    await refreshStatus();
   }
 
   async function handleMinimize() {
@@ -150,6 +240,7 @@ function App() {
   const busy =
     launcherState === "checking" ||
     launcherState === "installing" ||
+    launcherState === "updating" ||
     launcherState === "launching";
 
   const primaryLabel =
@@ -166,13 +257,18 @@ function App() {
       ? "Vérification"
       : launcherState === "installing"
         ? "Installation"
-        : launcherState === "launching"
+        : launcherState === "updating"
+          ? "Mise à jour"
+          : launcherState === "launching"
           ? "Lancement"
           : launcherState === "error"
             ? "Erreur"
-            : companion.installed
-              ? "Prêt"
-              : "À installer";
+            : updateStatus?.update_available &&
+                companion.installed
+              ? "Mise à jour disponible"
+              : companion.installed
+                ? "À jour"
+                : "À installer";
 
   return (
     <div className="launcher-shell">
@@ -246,9 +342,12 @@ function App() {
                 } ${launcherState === "error" ? "status-pill-error" : ""}`}
               >
                 <span className="status-dot" />
-                {companion.installed
-                  ? "Prêt à jouer"
-                  : "Installation requise"}
+                {updateStatus?.update_available &&
+                companion.installed
+                  ? "Mise à jour disponible"
+                  : companion.installed
+                    ? "Prêt à jouer"
+                    : "Installation requise"}
               </div>
 
               <p className="eyebrow">GAMEMATE COMPANION</p>
@@ -258,9 +357,12 @@ function App() {
                   ? "Tout est prêt."
                   : "Installe GameMate."}
                 <span>
-                  {companion.installed
-                    ? "Lance le Companion."
-                    : "Le Launcher s’occupe du reste."}
+                  {updateStatus?.update_available &&
+                  companion.installed
+                    ? `Version ${updateStatus.latest_version} disponible.`
+                    : companion.installed
+                      ? "Lance le Companion."
+                      : "Le Launcher s’occupe du reste."}
                 </span>
               </h1>
 
@@ -286,10 +388,15 @@ function App() {
                 <button
                   type="button"
                   className="check-button"
-                  onClick={() => void refreshStatus()}
+                  onClick={() => void handleSecondaryAction()}
                   disabled={busy}
                 >
-                  Vérifier l’installation
+                  {launcherState === "updating"
+                    ? "Mise à jour..."
+                    : updateStatus?.update_available &&
+                        companion.installed
+                      ? `Mettre à jour vers ${updateStatus.latest_version}`
+                      : "Vérifier les mises à jour"}
                 </button>
               </div>
 
@@ -305,14 +412,17 @@ function App() {
                   <span>VERSION INSTALLÉE</span>
                   <strong>
                     {companion.installed
-                      ? "Alpha 0.1.0"
+                      ? "Installée"
                       : "Non installé"}
                   </strong>
                 </div>
 
                 <div>
                   <span>DERNIÈRE VERSION</span>
-                  <strong>Alpha 0.1.0</strong>
+                  <strong>
+                    {updateStatus?.latest_version ??
+                      "Vérification requise"}
+                  </strong>
                 </div>
 
                 <div>
@@ -411,12 +521,21 @@ function App() {
           <span>Windows</span>
         </footer>
 
-        {launcherState === "launching" && (
+        {(launcherState === "launching" ||
+          launcherState === "updating") && (
           <div className="launch-splash">
             <div className="launch-splash-card">
               <img src="/gamemate-logo.png" alt="GameMate" />
-              <strong>Lancement du Companion…</strong>
-              <span>Ouverture de l’application installée.</span>
+              <strong>
+                {launcherState === "updating"
+                  ? "Mise à jour de GameMate…"
+                  : "Lancement du Companion…"}
+              </strong>
+              <span>
+                {launcherState === "updating"
+                  ? "Téléchargement et installation de la dernière version."
+                  : "Ouverture de l’application installée."}
+              </span>
               <div className="launch-splash-loader" />
             </div>
           </div>

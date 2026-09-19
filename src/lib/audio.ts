@@ -47,13 +47,10 @@ async function play(path: string, volume: number) {
   try {
     const audio = new Audio(path);
     audio.volume = Math.max(0, Math.min(1, volume));
-    await applyPreferredOutput(audio);
     await audio.play();
-    return true;
   } catch {
     // Browsers can block audio until the user has interacted once.
     // Tauri/Desktop usually allows it after normal app interaction.
-    return false;
   }
 }
 
@@ -67,10 +64,6 @@ export function playMessageSendSound() {
   void play("/sounds/message-send.wav", effectiveVolume("send"));
 }
 
-export function testSelectedOutput() {
-  return play("/sounds/notification-bell.wav", Math.max(0.2, effectiveVolume("receive")));
-}
-
 export const soundPreferenceKeys = {
   all: SOUND_ENABLED_KEY,
   receive: RECEIVE_SOUND_KEY,
@@ -79,4 +72,3 @@ export const soundPreferenceKeys = {
   receiveVolume: RECEIVE_VOLUME_KEY,
   sendVolume: SEND_VOLUME_KEY,
 } as const;
-import { applyPreferredOutput } from "./mediaDevices";

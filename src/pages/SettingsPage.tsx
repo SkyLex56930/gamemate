@@ -2,8 +2,6 @@ import { useMemo, useRef, useState, type CSSProperties, type ReactNode } from "r
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase";
 import { playMessageSendSound, playNotificationSound, soundPreferenceKeys } from "../lib/audio";
-import { audioDevicePreferenceKeys } from "../lib/mediaDevices";
-import AudioDeviceSettings from "../components/AudioDeviceSettings";
 import "./SettingsPage.css";
 
 type UiScale = "compact" | "normal" | "large" | "xlarge";
@@ -77,11 +75,6 @@ const LOCAL_SETTING_KEYS = [
   "gamemate-master-volume",
   "gamemate-notification-volume",
   "gamemate-message-send-volume",
-  audioDevicePreferenceKeys.input,
-  audioDevicePreferenceKeys.output,
-  audioDevicePreferenceKeys.echoCancellation,
-  audioDevicePreferenceKeys.noiseSuppression,
-  audioDevicePreferenceKeys.autoGainControl,
   "gamemate-presence-status",
   "gamemate-enter-to-send",
 ];
@@ -183,7 +176,7 @@ export default function SettingsPage({
 
   function exportConfiguration() {
     const settings = Object.fromEntries(LOCAL_SETTING_KEYS.map((key) => [key, localStorage.getItem(key)]));
-    const blob = new Blob([JSON.stringify({ version: 9, exportedAt: new Date().toISOString(), settings }, null, 2)], { type: "application/json" });
+    const blob = new Blob([JSON.stringify({ version: 8, exportedAt: new Date().toISOString(), settings }, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
@@ -210,7 +203,7 @@ export default function SettingsPage({
 
   async function copyDiagnostics() {
     const details = [
-      "GameMate Companion V9",
+      "GameMate Companion V8",
       `Compte: ${session ? "connecté" : "déconnecté"}`,
       `Interface: ${uiScale} / ${navigationMode}`,
       `Accent: ${appearance.accent}`,
@@ -244,7 +237,7 @@ export default function SettingsPage({
         <div className="settings-head-status">
           <span className={session ? "is-online" : ""}><i /> {connectedLabel}</span>
           <strong>{displayName}</strong>
-          <small>Configuration locale V9</small>
+          <small>Configuration locale V8</small>
         </div>
       </header>
 
@@ -343,15 +336,12 @@ export default function SettingsPage({
 
           {tab === "audio" && (
             <>
-              <SettingsPanel index="01" kicker="PÉRIPHÉRIQUES" title="Studio audio" description="Choisis tes périphériques Windows et vérifie leur fonctionnement en direct.">
-                <AudioDeviceSettings onNotice={announce} />
-              </SettingsPanel>
-              <SettingsPanel index="02" kicker="MIXAGE" title="Volumes du Companion" description="Trois niveaux indépendants, sauvegardés sur cet appareil.">
+              <SettingsPanel index="01" kicker="MIXAGE" title="Volumes du Companion" description="Trois niveaux indépendants, sauvegardés sur cet appareil.">
                 <Range title="Volume principal" description="Niveau global de tous les sons" value={masterVolume} disabled={!soundEnabled} onChange={(value) => setVolume(soundPreferenceKeys.masterVolume, value, setMasterVolume)} />
                 <Range title="Notifications" description="Alertes reçues et événements sociaux" value={notificationVolume} disabled={!soundEnabled || !notificationSound} onChange={(value) => setVolume(soundPreferenceKeys.receiveVolume, value, setNotificationVolume)} />
                 <Range title="Messages envoyés" description="Retour sonore après un envoi réussi" value={sendVolume} disabled={!soundEnabled || !messageSendSound} onChange={(value) => setVolume(soundPreferenceKeys.sendVolume, value, setSendVolume)} />
               </SettingsPanel>
-              <SettingsPanel index="03" kicker="ROUTAGE" title="Sons et alertes" description="Active séparément les signaux réellement utilisés par GameMate.">
+              <SettingsPanel index="02" kicker="ROUTAGE" title="Sons et alertes" description="Active séparément les signaux réellement utilisés par GameMate.">
                 <Toggle title="Audio du Companion" description="Interrupteur principal de tous les sons." checked={soundEnabled} onChange={(value) => setSound(soundPreferenceKeys.all, value, setSoundEnabled)} />
                 <Toggle title="Son de notification" description="Joué à la réception d’une notification." checked={notificationSound} disabled={!soundEnabled} actionLabel="Tester" onAction={playNotificationSound} onChange={(value) => setSound(soundPreferenceKeys.receive, value, setNotificationSound)} />
                 <Toggle title="Confirmation d’envoi" description="Jouée après l’envoi réussi d’un message." checked={messageSendSound} disabled={!soundEnabled} actionLabel="Tester" onAction={playMessageSendSound} onChange={(value) => setSound(soundPreferenceKeys.send, value, setMessageSendSound)} />
