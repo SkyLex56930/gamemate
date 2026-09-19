@@ -88,7 +88,6 @@ export default function ProfilePage({
   userGames,
   gamingDna,
   availability,
-  lookingFor,
   loading,
   onLogin,
 }: Props) {

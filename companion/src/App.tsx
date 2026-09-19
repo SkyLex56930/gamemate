@@ -1,5 +1,5 @@
 import FindMatesScreen from "./pages/FindMatesPage";
-import { FormEvent, useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { FormEvent, useEffect, useState, type CSSProperties } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
@@ -107,8 +107,6 @@ type PerformanceSettings = {
 };
 
 const appWindow = getCurrentWindow();
-const dayNames = ["Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi"];
-
 const DEFAULT_PERFORMANCE: PerformanceSettings = {
   preset: "high",
   glow: 82,
@@ -1318,28 +1316,6 @@ function CleanHome({
         </article>
       </section>
     </div>
-  );
-}
-
-function QuickAction({
-  icon,
-  title,
-  subtitle,
-  onClick,
-}: {
-  icon: string;
-  title: string;
-  subtitle: string;
-  onClick: () => void;
-}) {
-  return (
-    <button type="button" className="gm-quick-action" onClick={onClick}>
-      <span>{icon}</span>
-      <div>
-        <strong>{title}</strong>
-        <small>{subtitle}</small>
-      </div>
-    </button>
   );
 }
 
