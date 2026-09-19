@@ -199,8 +199,8 @@ export default function HomePage() {
 
           <div className={styles.downloadActions}>
             <a
-  className={styles.primaryButton}
-  href="https://github.com/SkyLex56930/gamemate/releases/latest/download/launcher_0.1.0_x64-setup.exe"
+  href="https://github.com/SkyLex56930/gamemate-releases/releases/latest/download/launcher_x64-setup.exe"
+  className="rounded-xl bg-gradient-to-r from-violet-600 via-fuchsia-600 to-cyan-500 px-7 py-4 font-semibold shadow-[0_0_40px_rgba(124,58,237,0.25)] transition hover:scale-[1.02]"
 >
   Télécharger pour Windows
 </a>
@@ -209,10 +209,9 @@ export default function HomePage() {
             </Link>
           </div>
 
-          <p className={styles.downloadNote}>
-            Le bouton sera relié au vrai installateur du Launcher dès qu&apos;il
-            sera prêt.
-          </p>
+          <p className="mt-4 text-xs text-slate-500">
+  Windows 64 bits · GameMate Launcher Alpha 0.1.0
+</p>
         </div>
       </section>
 
