@@ -198,9 +198,12 @@ export default function HomePage() {
           </p>
 
           <div className={styles.downloadActions}>
-            <button className={styles.primaryButton} type="button">
-              Télécharger pour Windows
-            </button>
+            <a
+  className={styles.primaryButton}
+  href="https://github.com/SkyLex56930/gamemate/releases/latest/download/launcher_0.1.0_x64-setup.exe"
+>
+  Télécharger pour Windows
+</a>
             <Link href="/signup" className={styles.secondaryButton}>
               Créer un compte
             </Link>
