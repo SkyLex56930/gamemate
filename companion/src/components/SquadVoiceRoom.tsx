@@ -7,8 +7,9 @@ import {
   friendlyMediaError,
   readAudioDevicePreferences,
 } from "../lib/mediaDevices";
+import { Icon } from "./Icon";
 
-type SquadMember = {
+export type SquadMember = {
   user_id: string;
   display_name: string | null;
   username: string | null;
@@ -43,12 +44,30 @@ type VoiceStateMessage = {
   speaking?: boolean;
 };
 
+export type VoiceSessionSnapshot = {
+  squadId: string;
+  channelId: string;
+  channelName: string;
+  joined: boolean;
+  connecting: boolean;
+  muted: boolean;
+  deafened: boolean;
+  speaking: boolean;
+  participantCount: number;
+};
+
+type VoiceCommand = {
+  action: "toggle-mute" | "toggle-deafen" | "leave";
+  channelId?: string;
+};
+
 type Props = {
   squadId: string;
   channelId: string;
   channelName: string;
   currentUserId: string;
   members: SquadMember[];
+  onStateChange?: (snapshot: VoiceSessionSnapshot | null) => void;
 };
 
 function createRtcConfig(): RTCConfiguration {
@@ -80,6 +99,7 @@ export default function SquadVoiceRoom({
   channelName,
   currentUserId,
   members,
+  onStateChange,
 }: Props) {
   const [joined, setJoined] = useState(false);
   const [connecting, setConnecting] = useState(false);
@@ -454,8 +474,47 @@ export default function SquadVoiceRoom({
     return () => {
       mountedRef.current = false;
       leaveVoice();
+      onStateChange?.(null);
     };
-  }, [channelId, leaveVoice, squadId]);
+  }, [channelId, leaveVoice, onStateChange, squadId]);
+
+  useEffect(() => {
+    onStateChange?.({
+      squadId,
+      channelId,
+      channelName,
+      joined,
+      connecting,
+      muted,
+      deafened,
+      speaking: localSpeaking,
+      participantCount: participants.length,
+    });
+  }, [channelId, channelName, connecting, deafened, joined, localSpeaking, muted, onStateChange, participants.length, squadId]);
+
+  useEffect(() => {
+    const handleVoiceCommand = (event: Event) => {
+      const command = (event as CustomEvent<VoiceCommand>).detail;
+      if (!command || (command.channelId && command.channelId !== channelId)) return;
+
+      if (command.action === "leave") {
+        leaveVoice();
+        return;
+      }
+
+      if (!joined) return;
+
+      if (command.action === "toggle-mute") {
+        applyVoiceControls(!mutedRef.current, deafenedRef.current);
+      } else if (command.action === "toggle-deafen") {
+        const nextDeafened = !deafenedRef.current;
+        applyVoiceControls(mutedRef.current, nextDeafened);
+      }
+    };
+
+    window.addEventListener("gamemate:voice-command", handleVoiceCommand);
+    return () => window.removeEventListener("gamemate:voice-command", handleVoiceCommand);
+  }, [applyVoiceControls, channelId, joined, leaveVoice]);
 function toggleMute() {
     applyVoiceControls(!mutedRef.current, deafenedRef.current);
   }
@@ -477,7 +536,7 @@ function toggleMute() {
     <section className="voice-room">
       <header className="voice-room-head">
         <div className={`voice-room-orb ${joined ? "connected" : ""} ${localSpeaking ? "speaking" : ""}`}>
-          <span>◖◗</span><i /><b />
+          <span><Icon name="headphones" /></span><i /><b />
         </div>
         <div>
           <span className="team-kicker">SALON VOCAL SÉCURISÉ</span>
@@ -487,7 +546,7 @@ function toggleMute() {
         <span className={`voice-room-state ${joined ? "online" : ""}`}><i />{joined ? "CONNECTÉ" : connecting ? "CONNEXION…" : "HORS LIGNE"}</span>
       </header>
 
-      {error && <div className="voice-room-error"><span>!</span>{error}</div>}
+      {error && <div className="voice-room-error"><span><Icon name="alert-circle" size={16} /></span>{error}</div>}
 
       {!supported ? (
         <div className="voice-room-unsupported"><strong>WebRTC indisponible</strong><p>Cette version du WebView Windows ne permet pas encore le vocal.</p></div>
@@ -499,9 +558,9 @@ function toggleMute() {
             <p>GameMate utilisera le microphone, la sortie et les traitements choisis dans tes paramètres audio.</p>
           </div>
           <ul>
-            <li><span>✓</span>Microphone sélectionné</li>
-            <li><span>✓</span>Réduction du bruit</li>
-            <li><span>✓</span>Connexion chiffrée WebRTC</li>
+            <li><span><Icon name="check" size={15} /></span>Microphone sélectionné</li>
+            <li><span><Icon name="check" size={15} /></span>Réduction du bruit</li>
+            <li><span><Icon name="check" size={15} /></span>Connexion chiffrée WebRTC</li>
           </ul>
           <button type="button" disabled={connecting} onClick={() => void joinVoice()}>{connecting ? "Connexion au salon…" : "Rejoindre le vocal"}</button>
         </div>
@@ -517,7 +576,7 @@ function toggleMute() {
                 <article key={participant.user_id} className={`voice-person ${participant.speaking || (isMe && localSpeaking) ? "speaking" : ""}`}>
                   <Avatar url={participant.avatar_url} name={participant.display_name} />
                   <div className="voice-person-copy"><strong>{participant.display_name}{isMe ? " (toi)" : ""}</strong><small>{participant.muted ? "Micro coupé" : connectionLabel(connection)}</small></div>
-                  <div className="voice-person-icons">{participant.deafened && <span title="Sourd">◉</span>}{participant.muted && <span title="Micro coupé">╱</span>}</div>
+                  <div className="voice-person-icons">{participant.deafened && <span title="Sourd"><Icon name="volume-x" size={15} /></span>}{participant.muted && <span title="Micro coupé"><Icon name="mic-off" size={15} /></span>}</div>
                   {!isMe && (
                   <label className="voice-person-volume"><span>VOL.</span><input type="range" min="0" max="100" value={volume} style={{ "--voice-volume": `${volume}%` } as CSSProperties} onChange={(event: ChangeEvent<HTMLInputElement>) => changeVolume(participant.user_id, Number(event.target.value))} /><b>{volume}</b></label>
                   )}
@@ -541,10 +600,10 @@ function toggleMute() {
             <h3>Console vocale</h3>
             <p>Les changements sont appliqués immédiatement à cette session.</p>
             <div className="voice-room-controls">
-              <button type="button" className={muted ? "active danger" : ""} onClick={toggleMute}><span>{muted ? "×" : "●"}</span><strong>{muted ? "Réactiver" : "Couper le micro"}</strong><small>{muted ? "Ton micro est coupé" : "Les autres t’entendent"}</small></button>
-              <button type="button" className={deafened ? "active danger" : ""} onClick={toggleDeafen}><span>◉</span><strong>{deafened ? "Réactiver le son" : "Mode sourd"}</strong><small>{deafened ? "Tu n’entends personne" : "Audio des membres actif"}</small></button>
+              <button type="button" className={muted ? "active danger" : ""} onClick={toggleMute}><span><Icon name={muted ? "mic-off" : "mic"} /></span><strong>{muted ? "Réactiver" : "Couper le micro"}</strong><small>{muted ? "Ton micro est coupé" : "Les autres t’entendent"}</small></button>
+              <button type="button" className={deafened ? "active danger" : ""} onClick={toggleDeafen}><span><Icon name={deafened ? "volume-x" : "headphones"} /></span><strong>{deafened ? "Réactiver le son" : "Mode sourd"}</strong><small>{deafened ? "Tu n’entends personne" : "Audio des membres actif"}</small></button>
             </div>
-            <div className="voice-room-privacy"><span>◇</span><div><strong>Confidentialité</strong><small>L’audio ne transite pas par la base de données GameMate et n’est pas enregistré.</small></div></div>
+            <div className="voice-room-privacy"><span><Icon name="shield" /></span><div><strong>Confidentialité</strong><small>L’audio ne transite pas par la base de données GameMate et n’est pas enregistré.</small></div></div>
             <button type="button" className="voice-room-leave" onClick={leaveVoice}>Quitter le vocal</button>
           </aside>
         </div>

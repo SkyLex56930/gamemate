@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase";
+import { Icon } from "./Icon";
 import "./LfgBoard.css";
 
 type UserGame = {
@@ -313,7 +314,7 @@ export default function LfgBoard({
           </select>
         </label>
         <button type="button" className="lfg8-refresh" disabled={refreshing} onClick={() => void loadPosts(true)}>
-          {refreshing ? "Actualisation…" : "↻ Actualiser"}
+          {refreshing ? "Actualisation…" : <><Icon name="refresh" size={15} /> Actualiser</>}
         </button>
       </div>
 
@@ -329,14 +330,14 @@ export default function LfgBoard({
         />
       ) : null}
 
-      {notice ? <div className="lfg8-feedback success"><span>✓</span>{notice}<button type="button" onClick={() => setNotice("")}>×</button></div> : null}
-      {error ? <div className="lfg8-feedback error"><span>!</span>{error}<button type="button" onClick={() => setError("")}>×</button></div> : null}
+      {notice ? <div className="lfg8-feedback success"><span><Icon name="check" size={16} /></span>{notice}<button type="button" onClick={() => setNotice("")} aria-label="Fermer"><Icon name="close" size={15} /></button></div> : null}
+      {error ? <div className="lfg8-feedback error"><span><Icon name="alert-circle" size={16} /></span>{error}<button type="button" onClick={() => setError("")} aria-label="Fermer"><Icon name="close" size={15} /></button></div> : null}
 
       {loading ? (
         <div className="lfg8-state"><i className="lfg8-spinner" /><h2>Chargement des annonces…</h2></div>
       ) : posts.length === 0 ? (
         <div className="lfg8-state">
-          <span className="lfg8-state-icon">⌁</span>
+          <span className="lfg8-state-icon"><Icon name="search" size={28} /></span>
           <h2>{scope === "all" ? "Aucune annonce active pour le moment." : "Rien à afficher ici."}</h2>
           <p>Sois le premier à proposer une partie : cela prend moins d’une minute.</p>
           {scope === "all" && userGames.length ? <button type="button" onClick={openCreate}>Créer la première annonce</button> : null}
@@ -386,7 +387,7 @@ function CreatePanel({ form, userGames, busy, onChange, onSelectGame, onCancel, 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) => onChange({ ...form, [key]: value });
   return (
     <section className="lfg8-create-panel">
-      <header><div><span>NOUVELLE ANNONCE</span><h2>De qui ta squad a-t-elle besoin ?</h2></div><button type="button" onClick={onCancel} aria-label="Fermer">×</button></header>
+      <header><div><span>NOUVELLE ANNONCE</span><h2>De qui ta squad a-t-elle besoin ?</h2></div><button type="button" onClick={onCancel} aria-label="Fermer"><Icon name="close" size={17} /></button></header>
       <div className="lfg8-form-grid">
         <label><span>Jeu et plateforme</span><select value={form.gameKey} onChange={(event) => onSelectGame(event.target.value)}>{userGames.map((game) => <option key={userGameKey(game)} value={userGameKey(game)}>{game.gameName} · {game.platformName ?? "Plateforme"}</option>)}</select></label>
         <label className="wide"><span>Titre</span><input maxLength={80} value={form.title} onChange={(event) => set("title", event.target.value)} placeholder="Ex. Recherche 2 joueurs classés" /></label>
@@ -445,9 +446,9 @@ function LfgCard({ post, busy, expandedApply, applyMessage, onApplyMessage, onTo
         {post.platform_name ? <span>{post.platform_name}</span> : null}
         {post.mode_text ? <span>{post.mode_text}</span> : null}
         {post.rank_text ? <span>{post.rank_text}</span> : null}
-        {post.region ? <span>⌖ {post.region}</span> : null}
-        {post.mic_required ? <span>● Micro</span> : null}
-        {post.crossplay_enabled ? <span>↔ Crossplay</span> : null}
+        {post.region ? <span><Icon name="map-pin" size={13} /> {post.region}</span> : null}
+        {post.mic_required ? <span><Icon name="mic" size={13} /> Micro</span> : null}
+        {post.crossplay_enabled ? <span><Icon name="link" size={13} /> Crossplay</span> : null}
       </div>
       <div className="lfg8-progress"><i style={{ width: `${Math.min(100, (post.current_players / post.max_players) * 100)}%` }} /><span>{full ? "Squad complète" : `${post.max_players - post.current_players} place(s) disponible(s)`}</span><time>Expire {relativeExpiry(post.expires_at)}</time></div>
 

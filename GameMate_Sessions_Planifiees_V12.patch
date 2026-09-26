@@ -1,0 +1,1187 @@
+diff --git a/companion/SUPABASE_SCHEDULED_SESSIONS_V12.sql b/companion/SUPABASE_SCHEDULED_SESSIONS_V12.sql
+new file mode 100644
+index 0000000..e5ad2f6
+--- /dev/null
++++ b/companion/SUPABASE_SCHEDULED_SESSIONS_V12.sql
+@@ -0,0 +1,370 @@
++-- GameMate Companion V12 — sessions de jeu planifiées
++-- À exécuter après SUPABASE_GAME_SESSIONS_V11.sql.
++
++begin;
++
++create table if not exists public.squad_scheduled_sessions (
++  id uuid primary key default gen_random_uuid(),
++  squad_id uuid not null references public.squads(id) on delete cascade,
++  game_id bigint references public.games(id) on delete set null,
++  created_by uuid not null references auth.users(id) on delete cascade,
++  title text not null,
++  mode text not null,
++  server_region text,
++  starts_at timestamptz not null,
++  duration_minutes integer not null default 120,
++  max_players integer not null default 6,
++  notes text,
++  status text not null default 'scheduled',
++  created_at timestamptz not null default now(),
++  updated_at timestamptz not null default now(),
++  constraint squad_scheduled_sessions_title_length check (char_length(title) between 3 and 80),
++  constraint squad_scheduled_sessions_mode_length check (char_length(mode) between 1 and 60),
++  constraint squad_scheduled_sessions_region_length check (server_region is null or char_length(server_region) <= 60),
++  constraint squad_scheduled_sessions_duration_check check (duration_minutes between 30 and 480),
++  constraint squad_scheduled_sessions_players_check check (max_players between 2 and 12),
++  constraint squad_scheduled_sessions_notes_length check (notes is null or char_length(notes) <= 500),
++  constraint squad_scheduled_sessions_status_check check (status in ('scheduled', 'cancelled', 'completed'))
++);
++
++create index if not exists squad_scheduled_sessions_upcoming_idx
++  on public.squad_scheduled_sessions (squad_id, starts_at)
++  where status = 'scheduled';
++
++create table if not exists public.squad_scheduled_session_responses (
++  session_id uuid not null references public.squad_scheduled_sessions(id) on delete cascade,
++  squad_id uuid not null references public.squads(id) on delete cascade,
++  user_id uuid not null references auth.users(id) on delete cascade,
++  response text not null,
++  created_at timestamptz not null default now(),
++  updated_at timestamptz not null default now(),
++  primary key (session_id, user_id),
++  constraint squad_scheduled_session_response_check check (response in ('going', 'maybe', 'declined'))
++);
++
++create index if not exists squad_scheduled_session_responses_squad_idx
++  on public.squad_scheduled_session_responses (squad_id, session_id);
++
++create table if not exists public.squad_scheduled_session_notifications (
++  id uuid primary key default gen_random_uuid(),
++  squad_id uuid not null references public.squads(id) on delete cascade,
++  scheduled_session_id uuid not null references public.squad_scheduled_sessions(id) on delete cascade,
++  recipient_id uuid not null references auth.users(id) on delete cascade,
++  actor_id uuid references auth.users(id) on delete set null,
++  kind text not null,
++  title text not null,
++  message text not null,
++  read_at timestamptz,
++  created_at timestamptz not null default now(),
++  constraint squad_scheduled_notification_kind_check check (kind in ('scheduled_created', 'scheduled_updated', 'scheduled_cancelled')),
++  constraint squad_scheduled_notification_title_length check (char_length(title) between 1 and 90),
++  constraint squad_scheduled_notification_message_length check (char_length(message) between 1 and 240)
++);
++
++create index if not exists squad_scheduled_notifications_recipient_idx
++  on public.squad_scheduled_session_notifications (recipient_id, read_at, created_at desc);
++
++alter table public.squad_scheduled_sessions enable row level security;
++alter table public.squad_scheduled_session_responses enable row level security;
++alter table public.squad_scheduled_session_notifications enable row level security;
++
++revoke all on public.squad_scheduled_sessions from public, anon, authenticated;
++revoke all on public.squad_scheduled_session_responses from public, anon, authenticated;
++revoke all on public.squad_scheduled_session_notifications from public, anon, authenticated;
++
++grant select on public.squad_scheduled_sessions to authenticated;
++grant select on public.squad_scheduled_session_responses to authenticated;
++grant select, update (read_at) on public.squad_scheduled_session_notifications to authenticated;
++
++drop policy if exists "squad members read scheduled sessions" on public.squad_scheduled_sessions;
++create policy "squad members read scheduled sessions"
++on public.squad_scheduled_sessions for select to authenticated
++using ((select private.is_squad_member(squad_id, (select auth.uid()))));
++
++drop policy if exists "squad members read scheduled responses" on public.squad_scheduled_session_responses;
++create policy "squad members read scheduled responses"
++on public.squad_scheduled_session_responses for select to authenticated
++using ((select private.is_squad_member(squad_id, (select auth.uid()))));
++
++drop policy if exists "users read own scheduled notifications" on public.squad_scheduled_session_notifications;
++create policy "users read own scheduled notifications"
++on public.squad_scheduled_session_notifications for select to authenticated
++using ((select auth.uid()) = recipient_id);
++
++drop policy if exists "users mark own scheduled notifications" on public.squad_scheduled_session_notifications;
++create policy "users mark own scheduled notifications"
++on public.squad_scheduled_session_notifications for update to authenticated
++using ((select auth.uid()) = recipient_id)
++with check ((select auth.uid()) = recipient_id);
++
++create or replace function public.get_my_scheduled_sessions_v12(
++  p_squad_id uuid default null,
++  p_limit integer default 12
++)
++returns table (
++  session_id uuid,
++  squad_id uuid,
++  squad_name text,
++  game_id bigint,
++  game_name text,
++  title text,
++  mode text,
++  server_region text,
++  starts_at timestamptz,
++  duration_minutes integer,
++  max_players integer,
++  notes text,
++  status text,
++  created_by uuid,
++  going_count bigint,
++  maybe_count bigint,
++  my_response text,
++  created_at timestamptz,
++  updated_at timestamptz
++)
++language sql
++stable
++security invoker
++set search_path = ''
++as $$
++  select
++    ss.id,
++    ss.squad_id,
++    s.name,
++    ss.game_id,
++    g.name,
++    ss.title,
++    ss.mode,
++    ss.server_region,
++    ss.starts_at,
++    ss.duration_minutes,
++    ss.max_players,
++    ss.notes,
++    ss.status,
++    ss.created_by,
++    (select count(*) from public.squad_scheduled_session_responses r where r.session_id = ss.id and r.response = 'going'),
++    (select count(*) from public.squad_scheduled_session_responses r where r.session_id = ss.id and r.response = 'maybe'),
++    (select r.response from public.squad_scheduled_session_responses r where r.session_id = ss.id and r.user_id = (select auth.uid())),
++    ss.created_at,
++    ss.updated_at
++  from public.squad_scheduled_sessions ss
++  join public.squads s on s.id = ss.squad_id
++  left join public.games g on g.id = ss.game_id
++  where (p_squad_id is null or ss.squad_id = p_squad_id)
++    and ss.status = 'scheduled'
++    and ss.starts_at >= now() - interval '4 hours'
++  order by ss.starts_at asc
++  limit least(greatest(coalesce(p_limit, 12), 1), 30);
++$$;
++
++create or replace function public.create_scheduled_session_v12(
++  p_squad_id uuid,
++  p_game_id bigint,
++  p_title text,
++  p_mode text,
++  p_server_region text,
++  p_starts_at timestamptz,
++  p_duration_minutes integer default 120,
++  p_max_players integer default 6,
++  p_notes text default null
++)
++returns uuid
++language plpgsql
++security definer
++set search_path = ''
++as $$
++declare
++  v_user_id uuid := auth.uid();
++  v_session_id uuid;
++  v_title text := nullif(btrim(p_title), '');
++  v_mode text := nullif(btrim(p_mode), '');
++  v_region text := nullif(btrim(p_server_region), '');
++  v_notes text := nullif(btrim(p_notes), '');
++  v_game_name text;
++begin
++  if v_user_id is null then raise exception 'authentication_required'; end if;
++  if not private.is_squad_owner(p_squad_id, v_user_id) then raise exception 'only_owner_can_schedule'; end if;
++  if v_title is null or char_length(v_title) not between 3 and 80 then raise exception 'invalid_title'; end if;
++  if v_mode is null or char_length(v_mode) > 60 then raise exception 'invalid_mode'; end if;
++  if v_region is not null and char_length(v_region) > 60 then raise exception 'invalid_region'; end if;
++  if v_notes is not null and char_length(v_notes) > 500 then raise exception 'invalid_notes'; end if;
++  if p_starts_at <= now() + interval '5 minutes' then raise exception 'invalid_start_time'; end if;
++  if p_duration_minutes not between 30 and 480 then raise exception 'invalid_duration'; end if;
++  if p_max_players not between 2 and 12 then raise exception 'invalid_max_players'; end if;
++
++  select g.name into v_game_name from public.games g where g.id = p_game_id;
++
++  insert into public.squad_scheduled_sessions (
++    squad_id, game_id, created_by, title, mode, server_region, starts_at,
++    duration_minutes, max_players, notes
++  ) values (
++    p_squad_id, p_game_id, v_user_id, v_title, v_mode, v_region, p_starts_at,
++    p_duration_minutes, p_max_players, v_notes
++  ) returning id into v_session_id;
++
++  insert into public.squad_scheduled_session_responses (session_id, squad_id, user_id, response)
++  values (v_session_id, p_squad_id, v_user_id, 'going');
++
++  insert into public.squad_scheduled_session_notifications (
++    squad_id, scheduled_session_id, recipient_id, actor_id, kind, title, message
++  )
++  select p_squad_id, v_session_id, sm.user_id, v_user_id, 'scheduled_created',
++    'Nouvelle session planifiée',
++    left(v_title || ' · ' || coalesce(v_game_name, 'Jeu à définir'), 240)
++  from public.squad_members sm
++  where sm.squad_id = p_squad_id and sm.user_id <> v_user_id;
++
++  return v_session_id;
++end;
++$$;
++
++create or replace function public.respond_scheduled_session_v12(
++  p_session_id uuid,
++  p_response text
++)
++returns void
++language plpgsql
++security definer
++set search_path = ''
++as $$
++declare
++  v_user_id uuid := auth.uid();
++  v_squad_id uuid;
++  v_status text;
++  v_starts_at timestamptz;
++begin
++  if v_user_id is null then raise exception 'authentication_required'; end if;
++  if p_response not in ('going', 'maybe', 'declined') then raise exception 'invalid_response'; end if;
++
++  select ss.squad_id, ss.status, ss.starts_at into v_squad_id, v_status, v_starts_at
++  from public.squad_scheduled_sessions ss where ss.id = p_session_id;
++
++  if v_squad_id is null then raise exception 'scheduled_session_not_found'; end if;
++  if not private.is_squad_member(v_squad_id, v_user_id) then raise exception 'not_squad_member'; end if;
++  if v_status <> 'scheduled' or v_starts_at < now() - interval '4 hours' then raise exception 'scheduled_session_closed'; end if;
++
++  insert into public.squad_scheduled_session_responses (
++    session_id, squad_id, user_id, response, updated_at
++  ) values (
++    p_session_id, v_squad_id, v_user_id, p_response, now()
++  )
++  on conflict (session_id, user_id) do update
++  set response = excluded.response, updated_at = now();
++end;
++$$;
++
++create or replace function public.update_scheduled_session_v12(
++  p_session_id uuid,
++  p_game_id bigint,
++  p_title text,
++  p_mode text,
++  p_server_region text,
++  p_starts_at timestamptz,
++  p_duration_minutes integer,
++  p_max_players integer,
++  p_notes text default null
++)
++returns void
++language plpgsql
++security definer
++set search_path = ''
++as $$
++declare
++  v_user_id uuid := auth.uid();
++  v_squad_id uuid;
++  v_title text := nullif(btrim(p_title), '');
++  v_mode text := nullif(btrim(p_mode), '');
++  v_region text := nullif(btrim(p_server_region), '');
++  v_notes text := nullif(btrim(p_notes), '');
++begin
++  select ss.squad_id into v_squad_id from public.squad_scheduled_sessions ss
++  where ss.id = p_session_id and ss.status = 'scheduled' for update;
++
++  if v_squad_id is null then raise exception 'scheduled_session_not_found'; end if;
++  if not private.is_squad_owner(v_squad_id, v_user_id) then raise exception 'only_owner_can_edit_schedule'; end if;
++  if v_title is null or char_length(v_title) not between 3 and 80 then raise exception 'invalid_title'; end if;
++  if v_mode is null or char_length(v_mode) > 60 then raise exception 'invalid_mode'; end if;
++  if v_region is not null and char_length(v_region) > 60 then raise exception 'invalid_region'; end if;
++  if v_notes is not null and char_length(v_notes) > 500 then raise exception 'invalid_notes'; end if;
++  if p_starts_at <= now() + interval '5 minutes' then raise exception 'invalid_start_time'; end if;
++  if p_duration_minutes not between 30 and 480 then raise exception 'invalid_duration'; end if;
++  if p_max_players not between 2 and 12 then raise exception 'invalid_max_players'; end if;
++
++  update public.squad_scheduled_sessions
++  set game_id = p_game_id, title = v_title, mode = v_mode, server_region = v_region,
++      starts_at = p_starts_at, duration_minutes = p_duration_minutes,
++      max_players = p_max_players, notes = v_notes, updated_at = now()
++  where id = p_session_id;
++
++  insert into public.squad_scheduled_session_notifications (
++    squad_id, scheduled_session_id, recipient_id, actor_id, kind, title, message
++  )
++  select v_squad_id, p_session_id, sm.user_id, v_user_id, 'scheduled_updated',
++    'Session mise à jour', left(v_title || ' · vérifie la nouvelle date et les détails.', 240)
++  from public.squad_members sm
++  where sm.squad_id = v_squad_id and sm.user_id <> v_user_id;
++end;
++$$;
++
++create or replace function public.cancel_scheduled_session_v12(p_session_id uuid)
++returns void
++language plpgsql
++security definer
++set search_path = ''
++as $$
++declare
++  v_user_id uuid := auth.uid();
++  v_squad_id uuid;
++  v_title text;
++begin
++  select ss.squad_id, ss.title into v_squad_id, v_title
++  from public.squad_scheduled_sessions ss
++  where ss.id = p_session_id and ss.status = 'scheduled' for update;
++
++  if v_squad_id is null then raise exception 'scheduled_session_not_found'; end if;
++  if not private.is_squad_owner(v_squad_id, v_user_id) then raise exception 'only_owner_can_cancel_schedule'; end if;
++
++  update public.squad_scheduled_sessions
++  set status = 'cancelled', updated_at = now()
++  where id = p_session_id;
++
++  insert into public.squad_scheduled_session_notifications (
++    squad_id, scheduled_session_id, recipient_id, actor_id, kind, title, message
++  )
++  select v_squad_id, p_session_id, sm.user_id, v_user_id, 'scheduled_cancelled',
++    'Session annulée', left(v_title || ' a été annulée.', 240)
++  from public.squad_members sm
++  where sm.squad_id = v_squad_id and sm.user_id <> v_user_id;
++end;
++$$;
++
++revoke all on function public.get_my_scheduled_sessions_v12(uuid, integer) from public, anon;
++revoke all on function public.create_scheduled_session_v12(uuid, bigint, text, text, text, timestamptz, integer, integer, text) from public, anon;
++revoke all on function public.respond_scheduled_session_v12(uuid, text) from public, anon;
++revoke all on function public.update_scheduled_session_v12(uuid, bigint, text, text, text, timestamptz, integer, integer, text) from public, anon;
++revoke all on function public.cancel_scheduled_session_v12(uuid) from public, anon;
++
++grant execute on function public.get_my_scheduled_sessions_v12(uuid, integer) to authenticated;
++grant execute on function public.create_scheduled_session_v12(uuid, bigint, text, text, text, timestamptz, integer, integer, text) to authenticated;
++grant execute on function public.respond_scheduled_session_v12(uuid, text) to authenticated;
++grant execute on function public.update_scheduled_session_v12(uuid, bigint, text, text, text, timestamptz, integer, integer, text) to authenticated;
++grant execute on function public.cancel_scheduled_session_v12(uuid) to authenticated;
++
++do $$
++begin
++  if not exists (
++    select 1 from pg_publication_tables
++    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'squad_scheduled_sessions'
++  ) then alter publication supabase_realtime add table public.squad_scheduled_sessions; end if;
++  if not exists (
++    select 1 from pg_publication_tables
++    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'squad_scheduled_session_responses'
++  ) then alter publication supabase_realtime add table public.squad_scheduled_session_responses; end if;
++  if not exists (
++    select 1 from pg_publication_tables
++    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'squad_scheduled_session_notifications'
++  ) then alter publication supabase_realtime add table public.squad_scheduled_session_notifications; end if;
++end;
++$$;
++
++commit;
+diff --git a/companion/src/components/HomeDashboard.css b/companion/src/components/HomeDashboard.css
+index f0524a8..799a532 100644
+--- a/companion/src/components/HomeDashboard.css
++++ b/companion/src/components/HomeDashboard.css
+@@ -10,6 +10,7 @@
+ .home-friend-list-v11,.home-conversation-list-v11{display:flex;min-height:0;flex:1;flex-direction:column}.home-friend-v11{display:grid;grid-template-columns:37px minmax(0,1fr) 30px;align-items:center;gap:9px;min-height:49px;border-bottom:1px solid rgba(76,103,138,.13)}.home-friend-v11:last-child{border-bottom:0}.home-friend-v11>span:nth-child(2){display:flex;min-width:0;flex-direction:column;gap:2px}.home-friend-v11 strong,.home-conversation-list-v11 strong{overflow:hidden;font-size:8.5px;text-overflow:ellipsis;white-space:nowrap}.home-friend-v11 small,.home-conversation-list-v11 small{overflow:hidden;color:#647991;font-size:7px;text-overflow:ellipsis;white-space:nowrap}.home-friend-v11>button{display:grid;width:28px;height:28px;place-items:center;border:1px solid rgba(var(--accent-rgb,109,55,239),.28);border-radius:8px;background:rgba(var(--accent-rgb,109,55,239),.08);color:#bba9ff;font-size:9px;cursor:pointer}
+ .home-conversation-list-v11>button{display:grid;min-height:53px;grid-template-columns:37px minmax(0,1fr) auto;align-items:center;gap:9px;border:0;border-bottom:1px solid rgba(76,103,138,.13);padding:5px 0;background:transparent;color:#e7edf6;text-align:left;cursor:pointer}.home-conversation-list-v11>button:last-child{border-bottom:0}.home-conversation-list-v11>button>span:nth-child(2){display:flex;min-width:0;flex-direction:column;gap:2px}.home-conversation-list-v11 em{display:grid;min-width:28px;min-height:20px;place-items:center;border-radius:999px;padding:0 6px;background:rgba(var(--accent-rgb,109,55,239),.12);color:#a993ef;font-size:6.5px;font-style:normal;font-weight:950}
+ .home-squad-summary-v11{display:grid;flex:1;grid-template-columns:50px minmax(0,1fr);align-content:start;align-items:center;gap:10px}.home-squad-emblem-v11{display:grid;width:48px;height:48px;place-items:center;border:1px solid rgba(var(--accent2-rgb,42,220,234),.33);border-radius:14px;background:linear-gradient(135deg,rgba(var(--accent-rgb,109,55,239),.31),rgba(var(--accent2-rgb,42,220,234),.16));color:#67dde8;font-size:18px}.home-squad-summary-v11 h3{margin:0;font-size:12px}.home-squad-summary-v11 p{margin:3px 0 0;color:#6a7e97;font-size:7px}.home-squad-stack-v11{grid-column:1/-1;display:flex;align-items:center;margin-top:8px}.home-squad-stack-v11 .home-avatar-v11{width:33px;height:33px;flex-basis:33px;margin-right:-7px;border:2px solid #061425;border-radius:50%}.home-squad-stack-v11 .home-avatar-v11 img{border-radius:50%}.home-squad-stack-v11>span{margin-left:13px;color:#70849c;font-size:7px;font-weight:900}.home-squad-summary-v11>button{grid-column:1/-1;display:flex;min-height:38px;align-items:center;justify-content:space-between;margin-top:11px;border:1px solid rgba(var(--accent-rgb,109,55,239),.4);border-radius:9px;padding:0 11px;background:rgba(var(--accent-rgb,109,55,239),.1);color:#d9d1ff;font-size:8px;font-weight:900;cursor:pointer}
++.home-focus-v11.scheduled .home-focus-orbit-v11{border-color:rgba(238,178,72,.45);background:radial-gradient(circle,rgba(224,161,51,.21),rgba(4,16,31,.78));color:#f0c36d}.home-focus-v11.scheduled .home-focus-orbit-v11 i{background:#eeb64e;box-shadow:0 0 10px #eeb64e}.home-squad-summary-v11>button.home-next-session-v12{align-items:center;margin-top:8px;border-color:rgba(var(--accent2-rgb,42,220,234),.25);padding:8px 9px;background:rgba(var(--accent2-rgb,42,220,234),.055);text-align:left}.home-next-session-v12>span{display:flex;min-width:0;flex-direction:column;gap:2px}.home-next-session-v12>span:last-child{align-items:flex-end}.home-next-session-v12 small{color:#687d96;font-size:5.7px}.home-next-session-v12 strong{overflow:hidden;max-width:130px;color:#dce7f4;font-size:6.8px;text-overflow:ellipsis;white-space:nowrap}
+ .home-lfg-list-v11{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;flex:1}.home-lfg-list-v11>button{display:grid;min-width:0;grid-template-columns:43px minmax(0,1fr);align-content:start;gap:9px;border:1px solid rgba(77,105,143,.2);border-radius:12px;padding:11px;background:rgba(3,14,27,.57);color:#e8edf6;text-align:left;cursor:pointer}.home-lfg-list-v11>button:hover{border-color:rgba(var(--accent2-rgb,42,220,234),.4)}.home-lfg-game-v11{display:grid;width:41px;height:41px;place-items:center;border:1px solid rgba(var(--accent-rgb,109,55,239),.36);border-radius:11px;background:linear-gradient(135deg,rgba(var(--accent-rgb,109,55,239),.32),rgba(var(--accent2-rgb,42,220,234),.14));color:#cfc4ff;font-size:9px;font-weight:950}.home-lfg-copy-v11{display:flex;min-width:0;flex-direction:column;gap:4px}.home-lfg-copy-v11 strong{display:-webkit-box;overflow:hidden;font-size:8.5px;line-height:1.35;-webkit-box-orient:vertical;-webkit-line-clamp:2}.home-lfg-copy-v11 small{overflow:hidden;color:#687d96;font-size:6.8px;text-overflow:ellipsis;white-space:nowrap}.home-lfg-meta-v11{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;border-top:1px solid rgba(75,103,138,.14);padding-top:8px}.home-lfg-meta-v11 strong{color:#65dce6;font-size:8px}.home-lfg-meta-v11 small{color:#6d8199;font-size:6.5px}
+ .home-profile-progress-v11{display:grid;flex:1;grid-template-columns:76px minmax(0,1fr) auto;align-items:center;gap:13px;border:0;background:transparent;color:#eaf0f8;text-align:left;cursor:pointer}.home-profile-progress-v11>span{--dashboard-progress:0deg;position:relative;display:grid;width:74px;height:74px;place-items:center;border-radius:50%;background:conic-gradient(rgb(var(--accent2-rgb,42,220,234)) var(--dashboard-progress),rgb(var(--accent-rgb,109,55,239)) var(--dashboard-progress),rgba(71,94,126,.24) 0)}.home-profile-progress-v11>span:after{content:"";position:absolute;inset:7px;border-radius:50%;background:#071628}.home-profile-progress-v11>span strong{position:relative;z-index:1;font-size:13px}.home-profile-progress-v11>div{display:flex;min-width:0;flex-direction:column;gap:5px}.home-profile-progress-v11>div strong{font-size:10px}.home-profile-progress-v11>div small{color:#6c8098;font-size:7.3px;line-height:1.5}.home-profile-progress-v11>b{color:#64dbe6;font-size:20px}
+ .home-empty-v11{display:flex;min-height:180px;flex:1;align-items:center;justify-content:center;flex-direction:column;text-align:center}.home-empty-v11>span{display:grid;width:42px;height:42px;place-items:center;border:1px solid rgba(var(--accent-rgb,109,55,239),.28);border-radius:13px;background:rgba(var(--accent-rgb,109,55,239),.08);color:#a994ed;font-size:15px}.home-empty-v11>strong{margin-top:9px;font-size:9px}.home-empty-v11>p{max-width:270px;margin:5px 0 10px;color:#63778f;font-size:7.5px;line-height:1.45}.home-empty-v11>button{border:0;background:transparent;color:#9c86e8;font-size:7.5px;font-weight:900;cursor:pointer}.home-skeleton-v11{display:flex;flex:1;flex-direction:column;gap:8px}.home-skeleton-v11 i{height:45px;border-radius:10px;background:linear-gradient(90deg,rgba(73,96,127,.08),rgba(103,130,166,.16),rgba(73,96,127,.08));background-size:200% 100%;animation:home-skeleton-slide-v11 1.4s linear infinite}@keyframes home-skeleton-slide-v11{to{background-position:-200% 0}}.home-refreshing-v11{position:fixed;right:26px;bottom:103px;z-index:170;border:1px solid rgba(80,108,145,.26);border-radius:999px;padding:5px 9px;background:rgba(4,15,29,.9);color:#6f849e;font-size:6.5px}
+diff --git a/companion/src/components/HomeDashboard.tsx b/companion/src/components/HomeDashboard.tsx
+index ab112e9..ba702b1 100644
+--- a/companion/src/components/HomeDashboard.tsx
++++ b/companion/src/components/HomeDashboard.tsx
+@@ -73,6 +73,21 @@ type ActiveSquad = {
+   members: SquadMember[];
+ };
+ 
++type UpcomingSession = {
++  session_id: string;
++  squad_id: string;
++  squad_name: string;
++  game_name: string | null;
++  title: string;
++  mode: string;
++  starts_at: string;
++  duration_minutes: number;
++  max_players: number;
++  going_count: number;
++  maybe_count: number;
++  my_response: "going" | "maybe" | "declined" | null;
++};
++
+ type LfgPost = {
+   post_id: string;
+   owner_id: string;
+@@ -94,6 +109,7 @@ type DashboardData = {
+   onlineFriends: OnlineFriend[];
+   conversations: ConversationPreview[];
+   squad: ActiveSquad | null;
++  upcomingSession: UpcomingSession | null;
+   recommendations: LfgPost[];
+ };
+ 
+@@ -118,6 +134,7 @@ const EMPTY_DATA: DashboardData = {
+   onlineFriends: [],
+   conversations: [],
+   squad: null,
++  upcomingSession: null,
+   recommendations: [],
+ };
+ 
+@@ -155,7 +172,7 @@ export default function HomeDashboard({
+     else setLoading(true);
+     setError("");
+ 
+-    const [friendshipsResult, conversationsResult, squadResult, lfgResult] = await Promise.all([
++    const [friendshipsResult, conversationsResult, squadResult, lfgResult, scheduleResult] = await Promise.all([
+       supabase
+         .from("friendships")
+         .select("requester_id, addressee_id")
+@@ -173,6 +190,10 @@ export default function HomeDashboard({
+         p_scope: "all",
+         p_limit: 8,
+       }),
++      supabase.rpc("get_my_scheduled_sessions_v12", {
++        p_squad_id: null,
++        p_limit: 1,
++      }),
+     ]);
+ 
+     if (requestId !== requestIdRef.current) return;
+@@ -182,6 +203,7 @@ export default function HomeDashboard({
+       conversationsResult.error,
+       squadResult.error,
+       lfgResult.error,
++      scheduleResult.error,
+     ].filter(Boolean);
+ 
+     const friendships = (friendshipsResult.data ?? []) as FriendshipRow[];
+@@ -269,12 +291,14 @@ export default function HomeDashboard({
+ 
+     const squadPayload = squadResult.data as { active_squad?: ActiveSquad | null } | null;
+     const lfgPosts = (lfgResult.data ?? []) as LfgPost[];
++    const scheduledSessions = (scheduleResult.data ?? []) as UpcomingSession[];
+     const externalPosts = lfgPosts.filter((post) => !post.is_owner);
+ 
+     setData({
+       onlineFriends,
+       conversations: conversationPreviews,
+       squad: squadPayload?.active_squad ?? null,
++      upcomingSession: scheduledSessions[0] ?? null,
+       recommendations: (externalPosts.length > 0 ? externalPosts : lfgPosts).slice(0, 4),
+     });
+     setError(errors.length > 0 ? "Certaines informations n’ont pas pu être actualisées." : "");
+@@ -304,6 +328,8 @@ export default function HomeDashboard({
+       .on("postgres_changes", { event: "*", schema: "public", table: "messages" }, refreshSoon)
+       .on("postgres_changes", { event: "*", schema: "public", table: "squads" }, refreshSoon)
+       .on("postgres_changes", { event: "*", schema: "public", table: "squad_members" }, refreshSoon)
++      .on("postgres_changes", { event: "*", schema: "public", table: "squad_scheduled_sessions" }, refreshSoon)
++      .on("postgres_changes", { event: "*", schema: "public", table: "squad_scheduled_session_responses" }, refreshSoon)
+       .on("postgres_changes", { event: "*", schema: "public", table: "lfg_posts_v8" }, refreshSoon)
+       .on("postgres_changes", { event: "*", schema: "public", table: "lfg_applications_v8" }, refreshSoon)
+       .subscribe();
+@@ -318,6 +344,12 @@ export default function HomeDashboard({
+     };
+   }, [loadDashboard, userId]);
+ 
++  function openPlanning() {
++    sessionStorage.setItem("gamemate-open-squad-tab", "planning");
++    window.dispatchEvent(new CustomEvent("gamemate:open-squad-tab", { detail: "planning" }));
++    onSquads();
++  }
++
+   return (
+     <div className="home-dashboard-v11">
+       <section className="home-command-v11">
+@@ -340,14 +372,16 @@ export default function HomeDashboard({
+           </div>
+         </div>
+ 
+-        <button type="button" className={`home-focus-v11 ${voiceSession ? "voice" : ""}`} onClick={voiceSession ? onSquads : onPlay}>
+-          <span className="home-focus-orbit-v11"><i /><b />{voiceSession ? "◖◗" : primaryGame?.gameName.slice(0, 2).toUpperCase() ?? "GM"}</span>
++        <button type="button" className={`home-focus-v11 ${voiceSession ? "voice" : data.upcomingSession ? "scheduled" : ""}`} onClick={voiceSession ? onSquads : data.upcomingSession ? openPlanning : onPlay}>
++          <span className="home-focus-orbit-v11"><i /><b />{voiceSession ? "◖◗" : data.upcomingSession ? "◷" : primaryGame?.gameName.slice(0, 2).toUpperCase() ?? "GM"}</span>
+           <span>
+-            <small>{voiceSession ? "VOCAL ACTIF" : "PROCHAINE ACTION"}</small>
+-            <strong>{voiceSession?.channelName ?? primaryGame?.gameName ?? "Compléter mon profil"}</strong>
++            <small>{voiceSession ? "VOCAL ACTIF" : data.upcomingSession ? "PROCHAINE SESSION" : "PROCHAINE ACTION"}</small>
++            <strong>{voiceSession?.channelName ?? data.upcomingSession?.title ?? primaryGame?.gameName ?? "Compléter mon profil"}</strong>
+             <em>
+               {voiceSession
+                 ? `${voiceSession.participantCount || 1} connecté${voiceSession.participantCount > 1 ? "s" : ""} · ${voiceSession.muted ? "micro coupé" : "micro actif"}`
++                : data.upcomingSession
++                ? `${scheduleDateLabel(data.upcomingSession.starts_at)} · ${data.upcomingSession.going_count}/${data.upcomingSession.max_players} confirmés`
+                 : primaryGame?.platformName ?? "Ajoute ton jeu principal"}
+             </em>
+           </span>
+@@ -404,7 +438,13 @@ export default function HomeDashboard({
+                 ))}
+                 <span>{data.squad.members.length}/{data.squad.max_members}</span>
+               </div>
+-              <button type="button" onClick={onSquads}>Rejoindre l’espace squad <b>→</b></button>
++              {data.upcomingSession && (
++                <button type="button" className="home-next-session-v12" onClick={openPlanning}>
++                  <span><small>PROCHAINE SESSION</small><strong>{data.upcomingSession.title}</strong></span>
++                  <span><strong>{scheduleDateLabel(data.upcomingSession.starts_at)}</strong><small>{data.upcomingSession.going_count}/{data.upcomingSession.max_players} présents</small></span>
++                </button>
++              )}
++              <button type="button" onClick={data.upcomingSession ? openPlanning : onSquads}>{data.upcomingSession ? "Ouvrir le planning" : "Rejoindre l’espace squad"} <b>→</b></button>
+             </div>
+           ) : <DashboardEmpty icon="◇" title="Aucune squad active" text="Crée une squad ou accepte une invitation pour jouer ensemble." action="Ouvrir les squads" onAction={onSquads} />}
+         </DashboardCard>
+@@ -504,6 +544,16 @@ function startLabel(value: string) {
+   return start.toLocaleDateString("fr-FR", { day: "2-digit", month: "short" });
+ }
+ 
++function scheduleDateLabel(value: string) {
++  const date = new Date(value);
++  const today = new Date();
++  const tomorrow = new Date(today);
++  tomorrow.setDate(today.getDate() + 1);
++  const sameDay = (left: Date, right: Date) => left.toDateString() === right.toDateString();
++  const day = sameDay(date, today) ? "Aujourd’hui" : sameDay(date, tomorrow) ? "Demain" : date.toLocaleDateString("fr-FR", { weekday: "short", day: "2-digit", month: "short" });
++  return `${day} à ${date.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}`;
++}
++
+ function profileAction(completion: number, gameCount: number) {
+   if (gameCount === 0) return "Ajoute ton premier jeu";
+   if (completion < 50) return "Continue la configuration";
+diff --git a/companion/src/components/NotificationCenter.tsx b/companion/src/components/NotificationCenter.tsx
+index 18ac38a..0625f15 100644
+--- a/companion/src/components/NotificationCenter.tsx
++++ b/companion/src/components/NotificationCenter.tsx
+@@ -70,6 +70,18 @@ type SquadSessionNotificationRow = {
+   created_at: string;
+ };
+ 
++type ScheduledSessionNotificationRow = {
++  id: string;
++  squad_id: string;
++  scheduled_session_id: string;
++  recipient_id: string;
++  kind: string;
++  title: string;
++  message: string;
++  read_at: string | null;
++  created_at: string;
++};
++
+ type FriendNotification = {
+   kind: "friend";
+   id: string;
+@@ -101,6 +113,7 @@ type GameSessionNotification = {
+   squadId: string;
+   title: string;
+   message: string;
++  targetTab: "session" | "planning";
+ };
+ 
+ type LfgNotificationRow = {
+@@ -199,7 +212,7 @@ export default function NotificationCenter({
+       return;
+     }
+ 
+-    const [inviteResult, sessionResult, deferredResult, friendResult, lfgCountResult] = await Promise.all([
++    const [inviteResult, sessionResult, scheduledResult, deferredResult, friendResult, lfgCountResult] = await Promise.all([
+       supabase
+         .from("squad_invites")
+         .select("id")
+@@ -210,6 +223,11 @@ export default function NotificationCenter({
+         .select("id", { count: "exact", head: true })
+         .eq("recipient_id", userId)
+         .is("read_at", null),
++      supabase
++        .from("squad_scheduled_session_notifications")
++        .select("id", { count: "exact", head: true })
++        .eq("recipient_id", userId)
++        .is("read_at", null),
+       supabase
+         .from("deferred_social_actions")
+         .select("kind, source_id")
+@@ -237,7 +255,11 @@ export default function NotificationCenter({
+         (request) => deferredFriendIds.has(request.id)
+       ).length;
+       setDeferredFriendCount(activeDeferredFriendCount);
+-      setSquadCount(activeSquadInvites + (sessionResult.error ? 0 : sessionResult.count ?? 0));
++      setSquadCount(
++        activeSquadInvites
++        + (sessionResult.error ? 0 : sessionResult.count ?? 0)
++        + (scheduledResult.error ? 0 : scheduledResult.count ?? 0)
++      );
+     }
+ 
+     if (lfgCountResult.error) {
+@@ -266,7 +288,7 @@ export default function NotificationCenter({
+     setLoading(true);
+     setError("");
+ 
+-    const [friendshipsResult, conversationsResult, squadInvitesResult, gameSessionsResult, deferredResult, lfgResult] =
++    const [friendshipsResult, conversationsResult, squadInvitesResult, gameSessionsResult, scheduledSessionsResult, deferredResult, lfgResult] =
+       await Promise.all([
+         supabase
+           .from("friendships")
+@@ -291,6 +313,13 @@ export default function NotificationCenter({
+           .is("read_at", null)
+           .order("created_at", { ascending: false })
+           .limit(20),
++        supabase
++          .from("squad_scheduled_session_notifications")
++          .select("id, squad_id, scheduled_session_id, recipient_id, kind, title, message, read_at, created_at")
++          .eq("recipient_id", userId)
++          .is("read_at", null)
++          .order("created_at", { ascending: false })
++          .limit(20),
+         supabase
+           .from("deferred_social_actions")
+           .select("id, kind, source_id, deferred_at")
+@@ -323,6 +352,9 @@ export default function NotificationCenter({
+     const gameSessionRows = gameSessionsResult.error
+       ? []
+       : ((gameSessionsResult.data ?? []) as SquadSessionNotificationRow[]);
++    const scheduledSessionRows = scheduledSessionsResult.error
++      ? []
++      : ((scheduledSessionsResult.data ?? []) as ScheduledSessionNotificationRow[]);
+     const lfgRows = lfgResult.error
+       ? []
+       : ((lfgResult.data ?? []) as LfgNotificationRow[]);
+@@ -338,7 +370,9 @@ export default function NotificationCenter({
+     );
+     setDeferredFriendCount(friendships.filter((request) => deferredFriendIds.has(request.id)).length);
+     setSquadCount(
+-      squadInvites.filter((invite) => !deferredSquadIds.has(invite.id)).length + gameSessionRows.length
++      squadInvites.filter((invite) => !deferredSquadIds.has(invite.id)).length
++      + gameSessionRows.length
++      + scheduledSessionRows.length
+     );
+ 
+     const conversationIds = conversations.map((conversation) => conversation.id);
+@@ -489,14 +523,26 @@ export default function NotificationCenter({
+     setLaterSquadNotifications(deferredSquadItems);
+ 
+     setGameSessionNotifications(
+-      gameSessionRows.map((notification) => ({
+-        kind: "game_session" as const,
+-        id: notification.id,
+-        createdAt: notification.created_at,
+-        squadId: notification.squad_id,
+-        title: notification.title,
+-        message: notification.message,
+-      }))
++      [
++        ...gameSessionRows.map((notification) => ({
++          kind: "game_session" as const,
++          id: notification.id,
++          createdAt: notification.created_at,
++          squadId: notification.squad_id,
++          title: notification.title,
++          message: notification.message,
++          targetTab: "session" as const,
++        })),
++        ...scheduledSessionRows.map((notification) => ({
++          kind: "game_session" as const,
++          id: notification.id,
++          createdAt: notification.created_at,
++          squadId: notification.squad_id,
++          title: notification.title,
++          message: notification.message,
++          targetTab: "planning" as const,
++        })),
++      ]
+     );
+ 
+     setLfgNotifications(
+@@ -608,6 +654,23 @@ export default function NotificationCenter({
+       )
+       .subscribe();
+ 
++    const scheduledSessionChannel = supabase
++      .channel(`global-notifications-scheduled-sessions:${userId}`)
++      .on(
++        "postgres_changes",
++        {
++          event: "*",
++          schema: "public",
++          table: "squad_scheduled_session_notifications",
++          filter: `recipient_id=eq.${userId}`,
++        },
++        () => {
++          void loadSquadCount();
++          if (open) void loadNotifications();
++        }
++      )
++      .subscribe();
++
+     const deferredChannel = supabase
+       .channel(`global-notifications-deferred:${userId}`)
+       .on(
+@@ -646,6 +709,7 @@ export default function NotificationCenter({
+       void supabase.removeChannel(messageChannel);
+       void supabase.removeChannel(squadChannel);
+       void supabase.removeChannel(gameSessionChannel);
++      void supabase.removeChannel(scheduledSessionChannel);
+       void supabase.removeChannel(deferredChannel);
+       void supabase.removeChannel(lfgNotificationChannel);
+     };
+@@ -790,21 +854,24 @@ export default function NotificationCenter({
+     setWorkingId(null);
+   }
+ 
+-  async function openGameSessionNotification(id: string) {
+-    setWorkingId(id);
++  async function openGameSessionNotification(item: GameSessionNotification) {
++    setWorkingId(item.id);
++    const table = item.targetTab === "planning"
++      ? "squad_scheduled_session_notifications"
++      : "squad_session_notifications";
+     const { error: updateError } = await supabase
+-      .from("squad_session_notifications")
++      .from(table)
+       .update({ read_at: new Date().toISOString() })
+-      .eq("id", id)
++      .eq("id", item.id)
+       .eq("recipient_id", userId);
+ 
+     if (updateError) setError("Impossible de marquer cette notification comme lue.");
+     else {
+       setOpen(false);
+       await loadSquadCount();
+-      sessionStorage.setItem("gamemate-open-squad-tab", "session");
++      sessionStorage.setItem("gamemate-open-squad-tab", item.targetTab);
+       window.dispatchEvent(
+-        new CustomEvent("gamemate:open-squad-tab", { detail: "session" })
++        new CustomEvent("gamemate:open-squad-tab", { detail: item.targetTab })
+       );
+       onOpenSquads();
+     }
+@@ -1007,7 +1074,7 @@ export default function NotificationCenter({
+                       key={`game-session-${item.id}`}
+                       item={item}
+                       working={workingId === item.id}
+-                      onOpen={() => void openGameSessionNotification(item.id)}
++                      onOpen={() => void openGameSessionNotification(item)}
+                     />
+                   );
+                 }
+diff --git a/companion/src/components/SquadSchedule.css b/companion/src/components/SquadSchedule.css
+new file mode 100644
+index 0000000..a00aa6a
+--- /dev/null
++++ b/companion/src/components/SquadSchedule.css
+@@ -0,0 +1,6 @@
++.schedule-v12{display:flex;min-height:610px;flex-direction:column;color:#eef4ff}.schedule-head-v12{display:flex;align-items:center;justify-content:space-between;gap:20px;border-bottom:1px solid rgba(77,106,144,.2);padding:24px 26px;background:radial-gradient(circle at 82% -30%,rgba(115,65,237,.22),transparent 42%)}.schedule-head-v12>div{min-width:0}.schedule-head-v12 span,.schedule-later-v12>header span,.schedule-modal-v12 header span,.schedule-confirm-v12>span{color:#36d5df;font-size:7px;font-weight:950;letter-spacing:.16em}.schedule-head-v12 h2{margin:6px 0 4px;font-size:24px;letter-spacing:-.04em}.schedule-head-v12 p{margin:0;color:#71869f;font-size:9px}.schedule-head-v12>button,.schedule-empty-v12>button{min-height:40px;border:1px solid rgba(114,68,239,.65);border-radius:10px;padding:0 15px;background:linear-gradient(105deg,#6938e9,#267cb3);color:#fff;font-size:8px;font-weight:950;cursor:pointer;box-shadow:0 12px 28px rgba(94,47,221,.17)}
++.schedule-alert-v12{display:flex;align-items:center;gap:9px;margin:13px 18px 0;border:1px solid rgba(43,213,165,.28);border-radius:9px;padding:9px 11px;background:rgba(26,125,98,.13);color:#75e6c1;font-size:8px}.schedule-alert-v12.error{border-color:rgba(255,75,111,.32);background:rgba(105,20,45,.19);color:#ff9bb0}.schedule-alert-v12 button{margin-left:auto;border:0;background:transparent;color:inherit;font-size:8px;font-weight:900;cursor:pointer}.schedule-loading-v12,.schedule-empty-v12{display:grid;min-height:520px;place-items:center;align-content:center;text-align:center;color:#71849c}.schedule-empty-v12>span{display:grid;width:70px;height:70px;place-items:center;border:1px solid rgba(112,65,232,.34);border-radius:22px;background:radial-gradient(circle,rgba(112,65,232,.25),rgba(5,18,34,.7));color:#b9a7ff;font-size:28px}.schedule-empty-v12 h3{margin:15px 0 5px;color:#eef4ff;font-size:19px}.schedule-empty-v12 p{max-width:420px;margin:0 0 17px;font-size:9px;line-height:1.55}
++.schedule-card-v12{display:grid;grid-template-columns:82px minmax(0,1fr) minmax(280px,.72fr);align-items:center;gap:17px;margin:10px 18px 0;border:1px solid rgba(75,105,144,.24);border-radius:15px;padding:16px;background:linear-gradient(135deg,rgba(7,24,43,.96),rgba(4,15,29,.96));box-shadow:0 14px 36px rgba(0,0,0,.12)}.schedule-card-v12.featured{margin-top:18px;border-color:rgba(105,65,232,.42);background:radial-gradient(circle at 90% 0,rgba(43,203,217,.11),transparent 36%),linear-gradient(135deg,rgba(10,29,54,.98),rgba(9,15,42,.98));box-shadow:0 20px 50px rgba(0,0,0,.2)}.schedule-date-v12{display:grid;width:76px;height:90px;place-items:center;align-content:center;border:1px solid rgba(99,63,218,.42);border-radius:16px;background:linear-gradient(150deg,rgba(105,57,228,.29),rgba(24,121,145,.12));text-transform:uppercase}.schedule-date-v12 strong{font-size:27px;line-height:1}.schedule-date-v12 span{margin-top:3px;color:#a99af0;font-size:8px;font-weight:950}.schedule-date-v12 small{margin-top:8px;border-radius:999px;padding:3px 7px;background:rgba(39,208,216,.11);color:#59dce5;font-size:7px;font-weight:900}.schedule-copy-v12{min-width:0}.schedule-copy-v12>span{color:#39d2dd;font-size:7px;font-weight:950;letter-spacing:.1em;text-transform:uppercase}.schedule-copy-v12 h3{margin:5px 0 5px;font-size:18px;letter-spacing:-.025em}.schedule-copy-v12 p{display:-webkit-box;overflow:hidden;margin:0;color:#7488a1;font-size:8px;line-height:1.5;-webkit-box-orient:vertical;-webkit-line-clamp:2}.schedule-copy-v12>div{display:flex;flex-wrap:wrap;gap:5px;margin-top:10px}.schedule-copy-v12 b{border-radius:99px;padding:5px 8px;background:rgba(38,197,152,.1);color:#58deb5;font-size:6.5px}.schedule-copy-v12 b.maybe{background:rgba(234,174,57,.09);color:#e7b95c}.schedule-actions-v12{display:flex;min-width:0;align-items:flex-end;flex-direction:column;gap:8px}.schedule-actions-v12>div{display:grid;width:100%;grid-template-columns:repeat(3,1fr);gap:5px}.schedule-actions-v12 button{min-height:32px;border:1px solid rgba(78,107,144,.26);border-radius:8px;padding:0 8px;background:rgba(3,13,27,.55);color:#8497ae;font-size:7px;font-weight:900;cursor:pointer}.schedule-actions-v12 button.active.going{border-color:rgba(43,220,168,.5);background:rgba(34,154,119,.17);color:#68e2bc}.schedule-actions-v12 button.active.maybe{border-color:rgba(230,177,68,.45);background:rgba(126,87,14,.18);color:#e8bd64}.schedule-actions-v12 button.active.declined{border-color:rgba(250,81,115,.4);background:rgba(111,21,46,.2);color:#ff98ae}.schedule-actions-v12>span{display:flex;gap:6px}.schedule-actions-v12>span button{border:0;background:transparent;color:#8e7bdd}.schedule-actions-v12>span button.danger{color:#d87c93}.schedule-actions-v12 .schedule-live-v12{width:100%;border-color:rgba(54,212,219,.36);background:rgba(31,151,161,.1);color:#63dfe5}
++.schedule-later-v12{margin:22px 0 24px}.schedule-later-v12>header{display:flex;align-items:center;justify-content:space-between;padding:0 22px 2px}.schedule-later-v12>header strong{color:#7589a2;font-size:7px}.schedule-later-v12>div{display:grid;grid-template-columns:1fr}.schedule-later-v12 .schedule-card-v12{grid-template-columns:70px minmax(0,1fr) minmax(270px,.65fr)}.schedule-later-v12 .schedule-date-v12{width:65px;height:75px}.schedule-later-v12 .schedule-date-v12 strong{font-size:22px}
++.schedule-modal-v12{position:fixed;inset:0;z-index:900;display:grid;place-items:center;padding:25px;background:rgba(0,6,15,.7);backdrop-filter:blur(8px)}.schedule-modal-v12>section{width:min(680px,100%);max-height:calc(100vh - 50px);overflow:auto;border:1px solid rgba(105,66,226,.43);border-radius:18px;background:radial-gradient(circle at 90% 0,rgba(42,201,216,.12),transparent 32%),#07172a;box-shadow:0 35px 100px rgba(0,0,0,.48)}.schedule-modal-v12>section>header{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(75,104,141,.2);padding:19px 21px}.schedule-modal-v12 h3{margin:5px 0 0;font-size:18px}.schedule-modal-v12 header>button{display:grid;width:31px;height:31px;place-items:center;border:1px solid rgba(82,111,148,.27);border-radius:8px;background:rgba(3,13,25,.6);color:#8ea0b5;font-size:18px;cursor:pointer}.schedule-form-v12{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:21px}.schedule-form-v12 label{display:flex;min-width:0;flex-direction:column;gap:6px}.schedule-form-v12 label.wide{grid-column:1/-1}.schedule-form-v12 label>span{color:#71859e;font-size:7px;font-weight:900}.schedule-form-v12 input,.schedule-form-v12 select,.schedule-form-v12 textarea{width:100%;border:1px solid rgba(70,103,141,.36);border-radius:9px;outline:none;background:#04111f;color:#edf3fc;font:inherit;font-size:9px}.schedule-form-v12 input,.schedule-form-v12 select{height:40px;padding:0 10px}.schedule-form-v12 textarea{min-height:82px;resize:vertical;padding:10px}.schedule-form-v12 input:focus,.schedule-form-v12 select:focus,.schedule-form-v12 textarea:focus{border-color:#7446ed;box-shadow:0 0 0 3px rgba(116,70,237,.1)}.schedule-modal-v12 footer{display:flex;align-items:center;justify-content:flex-end;gap:7px;border-top:1px solid rgba(75,104,141,.2);padding:14px 21px}.schedule-modal-v12 footer small{margin-right:auto;color:#61758e;font-size:6.5px}.schedule-modal-v12 footer button{min-height:36px;border:1px solid rgba(78,106,143,.28);border-radius:8px;padding:0 13px;background:rgba(3,13,26,.55);color:#a4b2c3;font-size:8px;font-weight:900;cursor:pointer}.schedule-modal-v12 footer button.primary{border-color:rgba(112,65,235,.61);background:linear-gradient(105deg,#6735e6,#267ba9);color:#fff}.schedule-modal-v12 footer button.danger{border-color:rgba(246,69,106,.4);background:rgba(120,20,48,.23);color:#ff9bb0}.schedule-modal-v12 footer button:disabled{opacity:.55;cursor:default}.schedule-confirm-v12{padding:24px!important}.schedule-confirm-v12 h3{margin:8px 0 7px;font-size:20px}.schedule-confirm-v12 p{margin:0;color:#7488a1;font-size:9px}.schedule-confirm-v12 footer{margin:20px -24px -24px}
++@media(max-width:900px){.schedule-card-v12,.schedule-later-v12 .schedule-card-v12{grid-template-columns:70px minmax(0,1fr)}.schedule-actions-v12{grid-column:1/-1;align-items:stretch}.schedule-actions-v12>span{justify-content:flex-end}.schedule-head-v12{align-items:flex-start;flex-direction:column}}@media(max-width:620px){.schedule-head-v12{padding:20px}.schedule-card-v12,.schedule-later-v12 .schedule-card-v12{grid-template-columns:1fr}.schedule-date-v12{width:100%;height:65px;grid-template-columns:auto auto auto;gap:7px}.schedule-date-v12 span,.schedule-date-v12 small{margin:0}.schedule-copy-v12{text-align:center}.schedule-copy-v12>div{justify-content:center}.schedule-form-v12{grid-template-columns:1fr}.schedule-form-v12 label.wide{grid-column:auto}.schedule-modal-v12 footer{align-items:stretch;flex-direction:column}.schedule-modal-v12 footer small{margin:0 0 4px}.schedule-actions-v12>span{justify-content:stretch}.schedule-actions-v12>span button{flex:1}}
+diff --git a/companion/src/components/SquadSchedule.tsx b/companion/src/components/SquadSchedule.tsx
+new file mode 100644
+index 0000000..0295729
+--- /dev/null
++++ b/companion/src/components/SquadSchedule.tsx
+@@ -0,0 +1,336 @@
++import { useCallback, useEffect, useMemo, useState } from "react";
++import { supabase } from "../lib/supabase";
++import "./SquadSchedule.css";
++
++type Game = { id: number; name: string };
++type ResponseValue = "going" | "maybe" | "declined";
++
++export type ScheduledSession = {
++  session_id: string;
++  squad_id: string;
++  squad_name: string;
++  game_id: number | null;
++  game_name: string | null;
++  title: string;
++  mode: string;
++  server_region: string | null;
++  starts_at: string;
++  duration_minutes: number;
++  max_players: number;
++  notes: string | null;
++  status: "scheduled" | "cancelled" | "completed";
++  created_by: string;
++  going_count: number;
++  maybe_count: number;
++  my_response: ResponseValue | null;
++  created_at: string;
++  updated_at: string;
++};
++
++type Props = {
++  squadId: string;
++  isOwner: boolean;
++  games: Game[];
++  defaultGameId: number | null;
++  squadMaxMembers: number;
++  onOpenLiveSession: () => void;
++};
++
++type FormState = {
++  title: string;
++  gameId: string;
++  mode: string;
++  serverRegion: string;
++  startsAt: string;
++  duration: number;
++  maxPlayers: number;
++  notes: string;
++};
++
++function initialForm(defaultGameId: number | null, maxPlayers: number): FormState {
++  const start = new Date(Date.now() + 60 * 60_000);
++  start.setMinutes(Math.ceil(start.getMinutes() / 15) * 15, 0, 0);
++  return {
++    title: "Session avec la squad",
++    gameId: defaultGameId == null ? "" : String(defaultGameId),
++    mode: "",
++    serverRegion: "Europe",
++    startsAt: toLocalInput(start),
++    duration: 120,
++    maxPlayers: Math.max(2, Math.min(12, maxPlayers)),
++    notes: "",
++  };
++}
++
++export default function SquadSchedule({
++  squadId,
++  isOwner,
++  games,
++  defaultGameId,
++  squadMaxMembers,
++  onOpenLiveSession,
++}: Props) {
++  const [sessions, setSessions] = useState<ScheduledSession[]>([]);
++  const [loading, setLoading] = useState(true);
++  const [working, setWorking] = useState<string | null>(null);
++  const [error, setError] = useState("");
++  const [notice, setNotice] = useState("");
++  const [formOpen, setFormOpen] = useState(false);
++  const [editing, setEditing] = useState<ScheduledSession | null>(null);
++  const [cancelTarget, setCancelTarget] = useState<ScheduledSession | null>(null);
++  const [form, setForm] = useState(() => initialForm(defaultGameId, squadMaxMembers));
++
++  const loadSessions = useCallback(async (background = false) => {
++    if (!background) setLoading(true);
++    const { data, error: loadError } = await supabase.rpc("get_my_scheduled_sessions_v12", {
++      p_squad_id: squadId,
++      p_limit: 20,
++    });
++
++    if (loadError) {
++      console.error("Scheduled sessions:", loadError);
++      setError("Impossible de charger le planning. Vérifie que le SQL V12 est installé.");
++    } else {
++      setSessions(((data ?? []) as ScheduledSession[]).map((session) => ({
++        ...session,
++        going_count: Number(session.going_count ?? 0),
++        maybe_count: Number(session.maybe_count ?? 0),
++      })));
++      setError("");
++    }
++    setLoading(false);
++  }, [squadId]);
++
++  useEffect(() => {
++    void loadSessions();
++  }, [loadSessions]);
++
++  useEffect(() => {
++    let timer: ReturnType<typeof setTimeout> | null = null;
++    const refresh = () => {
++      if (timer) clearTimeout(timer);
++      timer = setTimeout(() => void loadSessions(true), 180);
++    };
++    const channel = supabase
++      .channel(`squad-schedule-v12:${squadId}`)
++      .on("postgres_changes", { event: "*", schema: "public", table: "squad_scheduled_sessions", filter: `squad_id=eq.${squadId}` }, refresh)
++      .on("postgres_changes", { event: "*", schema: "public", table: "squad_scheduled_session_responses", filter: `squad_id=eq.${squadId}` }, refresh)
++      .subscribe();
++
++    return () => {
++      if (timer) clearTimeout(timer);
++      void supabase.removeChannel(channel);
++    };
++  }, [loadSessions, squadId]);
++
++  const nextSession = sessions[0] ?? null;
++  const laterSessions = useMemo(() => sessions.slice(1), [sessions]);
++
++  function openCreate() {
++    setEditing(null);
++    setForm(initialForm(defaultGameId, squadMaxMembers));
++    setFormOpen(true);
++    setError("");
++    setNotice("");
++  }
++
++  function openEdit(session: ScheduledSession) {
++    setEditing(session);
++    setForm({
++      title: session.title,
++      gameId: session.game_id == null ? "" : String(session.game_id),
++      mode: session.mode,
++      serverRegion: session.server_region ?? "",
++      startsAt: toLocalInput(new Date(session.starts_at)),
++      duration: session.duration_minutes,
++      maxPlayers: session.max_players,
++      notes: session.notes ?? "",
++    });
++    setFormOpen(true);
++    setError("");
++    setNotice("");
++  }
++
++  function actionError(message: string) {
++    if (message.includes("invalid_start_time")) return "Choisis une heure située au moins 5 minutes dans le futur.";
++    if (message.includes("only_owner")) return "Seul le chef de la squad peut modifier le planning.";
++    if (message.includes("scheduled_session_closed")) return "Cette session est déjà terminée ou annulée.";
++    return "L’action n’a pas pu être effectuée.";
++  }
++
++  async function saveSession() {
++    if (!form.title.trim() || !form.mode.trim() || !form.startsAt) return;
++    setWorking("save");
++    setError("");
++    setNotice("");
++
++    const common = {
++      p_game_id: form.gameId ? Number(form.gameId) : null,
++      p_title: form.title.trim(),
++      p_mode: form.mode.trim(),
++      p_server_region: form.serverRegion.trim() || null,
++      p_starts_at: new Date(form.startsAt).toISOString(),
++      p_duration_minutes: form.duration,
++      p_max_players: form.maxPlayers,
++      p_notes: form.notes.trim() || null,
++    };
++
++    const result = editing
++      ? await supabase.rpc("update_scheduled_session_v12", { p_session_id: editing.session_id, ...common })
++      : await supabase.rpc("create_scheduled_session_v12", { p_squad_id: squadId, ...common });
++
++    if (result.error) setError(actionError(result.error.message));
++    else {
++      setNotice(editing ? "Session mise à jour. Les membres ont été prévenus." : "Session ajoutée au planning.");
++      setFormOpen(false);
++      setEditing(null);
++      await loadSessions(true);
++    }
++    setWorking(null);
++  }
++
++  async function respond(sessionId: string, response: ResponseValue) {
++    setWorking(`${sessionId}:${response}`);
++    setError("");
++    const { error: responseError } = await supabase.rpc("respond_scheduled_session_v12", {
++      p_session_id: sessionId,
++      p_response: response,
++    });
++    if (responseError) setError(actionError(responseError.message));
++    else await loadSessions(true);
++    setWorking(null);
++  }
++
++  async function cancelSession() {
++    if (!cancelTarget) return;
++    setWorking("cancel");
++    setError("");
++    const { error: cancelError } = await supabase.rpc("cancel_scheduled_session_v12", {
++      p_session_id: cancelTarget.session_id,
++    });
++    if (cancelError) setError(actionError(cancelError.message));
++    else {
++      setNotice("Session annulée. Les membres ont été prévenus.");
++      setCancelTarget(null);
++      await loadSessions(true);
++    }
++    setWorking(null);
++  }
++
++  if (loading) return <div className="schedule-loading-v12">Chargement du planning…</div>;
++
++  return (
++    <div className="schedule-v12">
++      <header className="schedule-head-v12">
++        <div><span>PLANNING DE LA SQUAD</span><h2>Les prochaines sessions.</h2><p>Planifie une partie et laisse chaque membre confirmer sa présence.</p></div>
++        {isOwner && <button type="button" onClick={openCreate}>＋ Programmer</button>}
++      </header>
++
++      {error && <div className="schedule-alert-v12 error">{error}<button type="button" onClick={() => void loadSessions()}>Réessayer</button></div>}
++      {notice && <div className="schedule-alert-v12">{notice}</div>}
++
++      {!nextSession ? (
++        <section className="schedule-empty-v12">
++          <span>◷</span><h3>Aucune session programmée.</h3>
++          <p>{isOwner ? "Ajoute une date pour que toute la squad puisse s’organiser." : "Le chef de la squad n’a encore rien programmé."}</p>
++          {isOwner && <button type="button" onClick={openCreate}>Programmer la première session</button>}
++        </section>
++      ) : (
++        <>
++          <SessionCard
++            session={nextSession}
++            featured
++            isOwner={isOwner}
++            working={working}
++            onRespond={respond}
++            onEdit={openEdit}
++            onCancel={setCancelTarget}
++            onOpenLiveSession={onOpenLiveSession}
++          />
++          {laterSessions.length > 0 && (
++            <section className="schedule-later-v12">
++              <header><span>ENSUITE</span><strong>{laterSessions.length} session{laterSessions.length > 1 ? "s" : ""}</strong></header>
++              <div>{laterSessions.map((item) => (
++                <SessionCard key={item.session_id} session={item} isOwner={isOwner} working={working} onRespond={respond} onEdit={openEdit} onCancel={setCancelTarget} onOpenLiveSession={onOpenLiveSession} />
++              ))}</div>
++            </section>
++          )}
++        </>
++      )}
++
++      {formOpen && (
++        <div className="schedule-modal-v12" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setFormOpen(false); }}>
++          <section role="dialog" aria-modal="true" aria-labelledby="schedule-form-title-v12">
++            <header><div><span>{editing ? "MODIFIER" : "NOUVELLE SESSION"}</span><h3 id="schedule-form-title-v12">{editing ? "Mettre à jour la session" : "Programmer une partie"}</h3></div><button type="button" aria-label="Fermer" onClick={() => setFormOpen(false)}>×</button></header>
++            <div className="schedule-form-v12">
++              <label className="wide"><span>Titre</span><input maxLength={80} value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} /></label>
++              <label><span>Jeu</span><select value={form.gameId} onChange={(event) => setForm({ ...form, gameId: event.target.value })}><option value="">Jeu de la squad</option>{games.map((game) => <option key={game.id} value={game.id}>{game.name}</option>)}</select></label>
++              <label><span>Mode</span><input maxLength={60} placeholder="Classé, détente…" value={form.mode} onChange={(event) => setForm({ ...form, mode: event.target.value })} /></label>
++              <label><span>Date et heure</span><input type="datetime-local" min={minimumLocalTime()} value={form.startsAt} onChange={(event) => setForm({ ...form, startsAt: event.target.value })} /></label>
++              <label><span>Région / serveur</span><input maxLength={60} value={form.serverRegion} onChange={(event) => setForm({ ...form, serverRegion: event.target.value })} /></label>
++              <label><span>Durée prévue</span><select value={form.duration} onChange={(event) => setForm({ ...form, duration: Number(event.target.value) })}>{[60,90,120,180,240].map((minutes) => <option key={minutes} value={minutes}>{durationLabel(minutes)}</option>)}</select></label>
++              <label><span>Places</span><select value={form.maxPlayers} onChange={(event) => setForm({ ...form, maxPlayers: Number(event.target.value) })}>{Array.from({ length: 11 }, (_, index) => index + 2).map((value) => <option key={value} value={value}>{value} joueurs</option>)}</select></label>
++              <label className="wide"><span>Note facultative</span><textarea maxLength={500} placeholder="Objectif, niveau, préparation…" value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} /></label>
++            </div>
++            <footer><small>Heure locale · {Intl.DateTimeFormat().resolvedOptions().timeZone}</small><button type="button" onClick={() => setFormOpen(false)}>Annuler</button><button type="button" className="primary" disabled={working === "save" || !form.title.trim() || !form.mode.trim() || !form.startsAt} onClick={() => void saveSession()}>{working === "save" ? "Enregistrement…" : editing ? "Enregistrer" : "Programmer"}</button></footer>
++          </section>
++        </div>
++      )}
++
++      {cancelTarget && (
++        <div className="schedule-modal-v12" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setCancelTarget(null); }}>
++          <section className="schedule-confirm-v12" role="dialog" aria-modal="true"><span>ANNULATION</span><h3>Annuler « {cancelTarget.title} » ?</h3><p>Tous les membres de la squad seront prévenus.</p><footer><button type="button" onClick={() => setCancelTarget(null)}>Garder</button><button type="button" className="danger" disabled={working === "cancel"} onClick={() => void cancelSession()}>{working === "cancel" ? "Annulation…" : "Annuler la session"}</button></footer></section>
++        </div>
++      )}
++    </div>
++  );
++}
++
++function SessionCard({ session, featured = false, isOwner, working, onRespond, onEdit, onCancel, onOpenLiveSession }: {
++  session: ScheduledSession;
++  featured?: boolean;
++  isOwner: boolean;
++  working: string | null;
++  onRespond: (sessionId: string, response: ResponseValue) => void;
++  onEdit: (session: ScheduledSession) => void;
++  onCancel: (session: ScheduledSession) => void;
++  onOpenLiveSession: () => void;
++}) {
++  const startsIn = new Date(session.starts_at).getTime() - Date.now();
++  const soon = startsIn <= 30 * 60_000 && startsIn >= -4 * 60 * 60_000;
++  return (
++    <article className={`schedule-card-v12 ${featured ? "featured" : ""}`}>
++      <div className="schedule-date-v12"><strong>{new Date(session.starts_at).toLocaleDateString("fr-FR", { day: "2-digit" })}</strong><span>{new Date(session.starts_at).toLocaleDateString("fr-FR", { month: "short" }).replace(".", "")}</span><small>{new Date(session.starts_at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</small></div>
++      <div className="schedule-copy-v12"><span>{session.game_name ?? "Jeu de la squad"} · {session.mode}</span><h3>{session.title}</h3><p>{session.server_region ? `${session.server_region} · ` : ""}{durationLabel(session.duration_minutes)}{session.notes ? ` · ${session.notes}` : ""}</p><div><b>{session.going_count}/{session.max_players} confirmés</b>{session.maybe_count > 0 && <b className="maybe">{session.maybe_count} peut-être</b>}</div></div>
++      <div className="schedule-actions-v12">
++        <div role="group" aria-label={`Réponse pour ${session.title}`}>
++          <ResponseButton value="going" label="Présent" active={session.my_response === "going"} working={working} sessionId={session.session_id} onClick={onRespond} />
++          <ResponseButton value="maybe" label="Peut-être" active={session.my_response === "maybe"} working={working} sessionId={session.session_id} onClick={onRespond} />
++          <ResponseButton value="declined" label="Absent" active={session.my_response === "declined"} working={working} sessionId={session.session_id} onClick={onRespond} />
++        </div>
++        {soon && <button type="button" className="schedule-live-v12" onClick={onOpenLiveSession}>Ouvrir le ready-check →</button>}
++        {isOwner && <span><button type="button" onClick={() => onEdit(session)}>Modifier</button><button type="button" className="danger" onClick={() => onCancel(session)}>Annuler</button></span>}
++      </div>
++    </article>
++  );
++}
++
++function ResponseButton({ value, label, active, working, sessionId, onClick }: { value: ResponseValue; label: string; active: boolean; working: string | null; sessionId: string; onClick: (sessionId: string, response: ResponseValue) => void }) {
++  return <button type="button" className={`${value} ${active ? "active" : ""}`} disabled={working?.startsWith(`${sessionId}:`)} onClick={() => onClick(sessionId, value)}>{label}</button>;
++}
++
++function toLocalInput(date: Date) {
++  const shifted = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
++  return shifted.toISOString().slice(0, 16);
++}
++
++function minimumLocalTime() {
++  return toLocalInput(new Date(Date.now() + 5 * 60_000));
++}
++
++function durationLabel(minutes: number) {
++  const hours = Math.floor(minutes / 60);
++  const rest = minutes % 60;
++  if (!hours) return `${rest} min`;
++  return rest ? `${hours} h ${rest}` : `${hours} h`;
++}
+diff --git a/companion/src/pages/SquadsPage.tsx b/companion/src/pages/SquadsPage.tsx
+index eb1f6b8..cca8390 100644
+--- a/companion/src/pages/SquadsPage.tsx
++++ b/companion/src/pages/SquadsPage.tsx
+@@ -3,6 +3,7 @@ import type { Session } from "@supabase/supabase-js";
+ import { supabase } from "../lib/supabase";
+ import { playMessageSendSound } from "../lib/audio";
+ import SquadGameSession from "../components/SquadGameSession";
++import SquadSchedule from "../components/SquadSchedule";
+ import SquadVoiceRoom, { type VoiceSessionSnapshot } from "../components/SquadVoiceRoom";
+ import "./SquadsPage.css";
+ 
+@@ -106,15 +107,15 @@ type Friendship = {
+   status: string;
+ };
+ 
+-type Tab = "overview" | "session" | "members" | "chat" | "invite" | "settings";
++type Tab = "overview" | "planning" | "session" | "members" | "chat" | "invite" | "settings";
+ 
+ const SQUAD_TAB_REQUEST_KEY = "gamemate-open-squad-tab";
+ 
+ function readInitialSquadTab(): Tab {
+   const requested = sessionStorage.getItem(SQUAD_TAB_REQUEST_KEY);
+-  if (requested === "session") {
++  if (requested === "session" || requested === "planning") {
+     sessionStorage.removeItem(SQUAD_TAB_REQUEST_KEY);
+-    return "session";
++    return requested;
+   }
+   return "overview";
+ }
+@@ -257,9 +258,9 @@ export default function SquadsPage({
+     function openRequestedTab(event: Event) {
+       const requested = (event as CustomEvent<string | { tab: string; channelId?: string }>).detail;
+       const requestedTab = typeof requested === "string" ? requested : requested?.tab;
+-      if (requestedTab === "session") {
++      if (requestedTab === "session" || requestedTab === "planning") {
+         sessionStorage.removeItem(SQUAD_TAB_REQUEST_KEY);
+-        setTab("session");
++        setTab(requestedTab);
+       } else if (requestedTab === "chat") {
+         setTab("chat");
+         if (typeof requested !== "string" && requested.channelId) {
+@@ -738,6 +739,7 @@ export default function SquadsPage({
+ 
+           <nav className="team-tabs">
+             <Tab active={tab === "overview"} label="Aperçu" onClick={() => setTab("overview")} />
++            <Tab active={tab === "planning"} label="Planning" onClick={() => setTab("planning")} />
+             <Tab active={tab === "session"} label="Session de jeu" onClick={() => setTab("session")} />
+             <Tab active={tab === "members"} label="Membres" count={squad.members.length} onClick={() => setTab("members")} />
+             <Tab active={tab === "chat"} label="Chat" onClick={() => setTab("chat")} />
+@@ -764,6 +766,17 @@ export default function SquadsPage({
+               />
+             )}
+ 
++            {tab === "planning" && (
++              <SquadSchedule
++                squadId={squad.squad_id}
++                isOwner={isOwner}
++                games={games}
++                defaultGameId={squad.game_id}
++                squadMaxMembers={squad.max_members}
++                onOpenLiveSession={() => setTab("session")}
++              />
++            )}
++
+             {tab === "session" && (
+               <SquadGameSession
+                 squadId={squad.squad_id}

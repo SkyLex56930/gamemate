@@ -442,3 +442,6 @@
   .pub6-primary-actions .pub6-action { flex: 1; }
   .pub6-game-art { flex-basis: 78px; }
 }
+
+/* V15 — présence visible aux relations autorisées */
+.pub6-presence{display:flex;align-items:center;gap:6px;margin:7px 0;color:#71869e;font-size:8px}.pub6-presence>i{width:8px;height:8px;border-radius:50%;background:#35e7ad;box-shadow:0 0 8px rgba(53,231,173,.58)}.pub6-presence>strong{color:#d7e2ee;font-size:8px}.pub6-presence>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.pub6-presence.away>i{background:#f2b94e;box-shadow:0 0 8px rgba(242,185,78,.52)}.pub6-presence.dnd>i{background:#ff526c;box-shadow:0 0 8px rgba(255,82,108,.52)}.pub6-presence.offline>i{background:#64738a;box-shadow:none}

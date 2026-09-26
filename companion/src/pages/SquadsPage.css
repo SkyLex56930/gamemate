@@ -1120,6 +1120,8 @@
 @media(max-width:760px){.game-session-head{grid-template-columns:52px 1fr;padding:14px}.game-session-live{grid-column:1/-1;width:max-content}.game-session-signal{width:48px;height:48px;border-radius:14px}.game-session-create{grid-template-columns:1fr;width:calc(100% - 24px);margin:28px auto;padding:18px}.game-session-member-list{grid-template-columns:1fr}.game-session-summary>div:not(.game-session-progress){grid-template-columns:1fr;padding:10px}.game-session-form.compact{grid-template-columns:1fr}.game-session-form.compact label:first-child,.game-session-form.compact>button{grid-column:auto}.game-session-status-actions{grid-template-columns:1fr}.game-session-status-actions button{min-height:58px}}
 
 /* GameMate V10 — salon vocal réel */
+.team-persistent-chat.is-hidden,.team-persistent-voice.is-hidden{display:none}
+.team-persistent-chat,.team-persistent-voice{width:100%;min-width:0;min-height:0}
 .voice-room{display:flex;min-width:0;min-height:650px;flex-direction:column;overflow:hidden;background:radial-gradient(circle at 72% 0,rgba(var(--accent-rgb,109,55,239),.17),transparent 33%),linear-gradient(150deg,#061629,#030b16);color:#eef4ff}
 .voice-room-head{position:relative;display:grid;grid-template-columns:64px minmax(0,1fr) auto;align-items:center;gap:14px;min-height:105px;border-bottom:1px solid rgba(91,119,158,.2);padding:17px 20px;background:linear-gradient(90deg,rgba(var(--accent-rgb,109,55,239),.08),transparent)}
 .voice-room-head h2{margin:4px 0 3px;font-size:21px;letter-spacing:-.035em}.voice-room-head p{margin:0;color:#70849e;font-size:8.5px}.voice-room-orb{position:relative;display:grid;width:58px;height:58px;place-items:center;border:1px solid rgba(var(--accent-rgb,109,55,239),.36);border-radius:18px;background:radial-gradient(circle,rgba(var(--accent-rgb,109,55,239),.23),rgba(4,14,29,.8));color:rgb(var(--accent-light-rgb,178,147,255));font-size:17px;box-shadow:inset 0 0 24px rgba(var(--accent-rgb,109,55,239),.08)}.voice-room-orb i,.voice-room-orb b{position:absolute;width:6px;height:6px;border-radius:50%;background:#64758e}.voice-room-orb i{top:8px;right:9px}.voice-room-orb b{bottom:8px;left:9px}.voice-room-orb.connected{border-color:rgba(42,221,176,.45);box-shadow:inset 0 0 25px rgba(42,221,176,.1),0 0 20px rgba(42,221,176,.08)}.voice-room-orb.connected i{background:#35e0ae;box-shadow:0 0 10px #35e0ae}.voice-room-orb.speaking{animation:voice-orb-pulse 1.25s ease-in-out infinite;border-color:#37e7b6;box-shadow:0 0 0 5px rgba(55,231,182,.07),0 0 25px rgba(55,231,182,.16)}
@@ -1554,3 +1556,13 @@
 .prc-notice.error button:hover,
 .support-error button:hover,
 .fmx-error button:hover { background: rgba(255, 255, 255, .14); }
+
+/* V15 — présence dans les squads */
+.team-members article{grid-template-columns:56px minmax(0,1fr) auto auto auto}
+.team-presence{display:flex;align-items:center;gap:5px;border:1px solid rgba(72,105,143,.24);border-radius:999px;padding:4px 7px;color:#71869e;font-size:7px;font-weight:850;white-space:nowrap}
+.team-presence>i,.team-presence-dot{display:inline-block;width:7px;height:7px;flex:0 0 7px;border-radius:50%;background:#35e7ad;box-shadow:0 0 7px rgba(53,231,173,.58)}
+.team-presence.away>i,.team-presence-dot.away{background:#f2b94e;box-shadow:0 0 7px rgba(242,185,78,.5)}
+.team-presence.dnd>i,.team-presence-dot.dnd{background:#ff526c;box-shadow:0 0 7px rgba(255,82,108,.5)}
+.team-presence.offline>i,.team-presence-dot.offline{background:#64738a;box-shadow:none}
+.team-friend-row small{display:flex;align-items:center;gap:5px}
+@media(max-width:900px){.team-members article{grid-template-columns:50px minmax(0,1fr) auto}.team-presence{grid-column:2}.team-role{grid-column:3;grid-row:1}.team-member-actions{grid-column:2/4}}

@@ -148,7 +148,7 @@
 .fmx-score strong{font-size:13px}.fmx-score small{max-width:50px;color:#7f94ad;font-size:5.5px;line-height:1.1;text-transform:uppercase}
 .fmx-avatar{position:relative;overflow:visible}.fmx-avatar img{border-radius:12px}
 .fmx-presence{position:absolute;right:-3px;bottom:-3px;width:12px;height:12px;border:3px solid #07162a;border-radius:50%;background:#52657b}
-.fmx-presence.online{background:#2de6b2;box-shadow:0 0 9px rgba(45,230,178,.7)}.fmx-presence.busy{background:#f0b84c}
+.fmx-presence.online{background:#2de6b2;box-shadow:0 0 9px rgba(45,230,178,.7)}.fmx-presence.away{background:#f0b84c}.fmx-presence.busy,.fmx-presence.dnd{background:#ff6577}
 .fmx-identity small{color:#5f7895;font-size:7px}
 .fmx-platform-line{display:flex;flex-wrap:wrap;gap:5px;margin-top:11px}.fmx-platform-line span{border:1px solid rgba(52,185,209,.2);border-radius:5px;padding:4px 6px;background:rgba(12,103,130,.08);color:#77dbe9;font-size:7px}
 .fmx-common-slot{display:grid;grid-template-columns:24px auto 1fr;align-items:center;gap:7px;margin-top:9px;border:1px solid rgba(42,218,179,.22);border-radius:7px;padding:7px 8px;background:rgba(18,151,117,.07)}

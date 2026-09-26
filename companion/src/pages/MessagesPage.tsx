@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase";
 import { playMessageSendSound } from "../lib/audio";
+import { Icon } from "../components/Icon";
+import { presenceActivity, readPresenceStatus, type OwnPresenceStatus, type PresenceSnapshot, type PresenceStatus } from "../lib/presence";
 import "./MessagesPage.css";
 
 type Props = {
@@ -44,16 +46,15 @@ type ConversationView = {
   profile: Profile;
   lastMessage: Message | null;
   unread: number;
+  presence: PresenceSnapshot;
 };
 
-type PresenceStatus = "online" | "busy" | "offline";
 type SidebarTab = "conversations" | "friends";
 
 type FriendWithPresence = {
   user_id: string;
   profile: Profile;
-  status: PresenceStatus;
-  last_seen_at: string | null;
+  presence: PresenceSnapshot;
 };
 
 export default function MessagesPage({
@@ -72,10 +73,7 @@ export default function MessagesPage({
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>("conversations");
   const [friends, setFriends] = useState<FriendWithPresence[]>([]);
   const [loadingFriends, setLoadingFriends] = useState(true);
-  const [myPresence, setMyPresence] = useState<PresenceStatus>(() => {
-    const saved = localStorage.getItem("gamemate-presence-status");
-    return saved === "busy" || saved === "offline" ? saved : "online";
-  });
+  const [myPresence, setMyPresence] = useState<OwnPresenceStatus>(readPresenceStatus);
   const [loadingList, setLoadingList] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [sending, setSending] = useState(false);
@@ -129,7 +127,7 @@ export default function MessagesPage({
 
     const conversationIds = rawConversations.map((conversation) => conversation.id);
 
-    const [profilesResult, messagesResult] = await Promise.all([
+    const [profilesResult, messagesResult, presenceResult] = await Promise.all([
       supabase
         .from("profiles")
         .select("id, username, display_name, avatar_url, region, language")
@@ -139,9 +137,10 @@ export default function MessagesPage({
         .select("id, conversation_id, sender_id, body, created_at, read_at")
         .in("conversation_id", conversationIds)
         .order("created_at", { ascending: false }),
+      supabase.rpc("get_presence_v15", { p_user_ids: otherIds }),
     ]);
 
-    if (profilesResult.error) {
+    if (profilesResult.error || presenceResult.error) {
       console.error("Messages / profiles:", profilesResult.error);
       setError("Impossible de charger les profils.");
       setLoadingList(false);
@@ -157,6 +156,9 @@ export default function MessagesPage({
 
     const profileMap = new Map<string, Profile>(
       (profilesResult.data ?? []).map((profile) => [profile.id, profile as Profile])
+    );
+    const presenceMap = new Map<string, PresenceSnapshot>(
+      ((presenceResult.data ?? []) as PresenceSnapshot[]).map((presence) => [presence.user_id, presence])
     );
 
     const allMessages = (messagesResult.data ?? []) as Message[];
@@ -188,6 +190,7 @@ export default function MessagesPage({
           profile,
           lastMessage: latestMap.get(conversation.id) ?? null,
           unread: unreadMap.get(conversation.id) ?? 0,
+          presence: presenceMap.get(otherId) ?? offlinePresence(otherId),
         };
       })
       .filter((value): value is ConversationView => Boolean(value))
@@ -204,14 +207,14 @@ export default function MessagesPage({
     setLoadingList(false);
   }, [userId, onUnreadCountChange]);
 
-  const loadFriends = useCallback(async () => {
+  const loadFriends = useCallback(async (background = false) => {
     if (!userId) {
       setFriends([]);
       setLoadingFriends(false);
       return;
     }
 
-    setLoadingFriends(true);
+    if (!background) setLoadingFriends(true);
 
     const { data: relationships, error: friendshipsError } = await supabase
       .from("friendships")
@@ -245,9 +248,7 @@ export default function MessagesPage({
         .select("id, username, display_name, avatar_url, region, language")
         .in("id", friendIds),
       supabase
-        .from("user_presence")
-        .select("user_id, status, last_seen_at")
-        .in("user_id", friendIds),
+        .rpc("get_presence_v15", { p_user_ids: friendIds }),
     ]);
 
     if (profilesResult.error) {
@@ -260,35 +261,20 @@ export default function MessagesPage({
       console.error("Messages / presence:", presenceResult.error);
     }
 
-    const presenceMap = new Map(
-      (presenceResult.data ?? []).map((row) => [row.user_id, row])
+    const presenceMap = new Map<string, PresenceSnapshot>(
+      ((presenceResult.data ?? []) as PresenceSnapshot[]).map((row) => [row.user_id, row])
     );
 
-    const now = Date.now();
-    const ttl = 90000;
-
     const hydrated: FriendWithPresence[] = (profilesResult.data ?? []).map((profile) => {
-      const presence = presenceMap.get(profile.id);
-      const fresh = presence?.last_seen_at
-        ? now - new Date(presence.last_seen_at).getTime() <= ttl
-        : false;
-
-      const status: PresenceStatus =
-        fresh && (presence?.status === "online" || presence?.status === "busy")
-          ? presence.status
-          : "offline";
-
       return {
         user_id: profile.id,
         profile: profile as Profile,
-        status,
-        last_seen_at: presence?.last_seen_at ?? null,
+        presence: presenceMap.get(profile.id) ?? offlinePresence(profile.id),
       };
     });
 
-    const rank: Record<PresenceStatus, number> = { online: 0, busy: 1, offline: 2 };
     hydrated.sort((a, b) => {
-      const statusDiff = rank[a.status] - rank[b.status];
+      const statusDiff = presenceRank(a.presence.status) - presenceRank(b.presence.status);
       if (statusDiff !== 0) return statusDiff;
       return profileName(a.profile).localeCompare(profileName(b.profile), "fr");
     });
@@ -415,17 +401,17 @@ export default function MessagesPage({
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "user_presence" },
-        () => void loadFriends()
+        () => void loadFriends(true)
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "friendships" },
-        () => void loadFriends()
+        () => void loadFriends(true)
       )
       .subscribe();
 
     const refresh = window.setInterval(() => {
-      void loadFriends();
+      void loadFriends(true);
     }, 45000);
 
     return () => {
@@ -526,7 +512,7 @@ export default function MessagesPage({
     await loadMessages(conversation.id);
   }
 
-  async function changeMyPresence(status: PresenceStatus) {
+  async function changeMyPresence(status: OwnPresenceStatus) {
     setMyPresence(status);
     localStorage.setItem("gamemate-presence-status", status);
     window.dispatchEvent(new Event("gamemate-presence-status-changed"));
@@ -639,18 +625,19 @@ export default function MessagesPage({
               <span className={`messages-presence-dot ${myPresence}`} />
               <select
                 value={myPresence}
-                onChange={(event) => void changeMyPresence(event.target.value as PresenceStatus)}
+                onChange={(event) => void changeMyPresence(event.target.value as OwnPresenceStatus)}
                 aria-label="Mon statut"
               >
                 <option value="online">En ligne</option>
-                <option value="busy">Occupé</option>
-                <option value="offline">Hors ligne</option>
+                <option value="away">Absent</option>
+                <option value="dnd">Ne pas déranger</option>
+                <option value="invisible">Invisible</option>
               </select>
             </div>
           </div>
 
           <div className="messages-search">
-            <span>⌕</span>
+            <Icon name="search" size={17} />
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
@@ -719,6 +706,7 @@ export default function MessagesPage({
 
                 <div className="messages-thread-person">
                   <strong>{profileName(selectedConversation.profile)}</strong>
+                  <small className={`status-${selectedConversation.presence.status}`}><i className={`messages-presence-dot ${selectedConversation.presence.status}`} />{presenceActivity(selectedConversation.presence)}</small>
                   <span>
                     {selectedConversation.profile.username
                       ? `@${selectedConversation.profile.username}`
@@ -812,32 +800,26 @@ function FriendItem({
   onMessage: () => void;
   onProfile: () => void;
 }) {
-  const labels: Record<PresenceStatus, string> = {
-    online: "En ligne",
-    busy: "Occupé",
-    offline: "Hors ligne",
-  };
-
   return (
     <div className="messages-friend">
       <button type="button" className="messages-friend-main" onClick={onMessage}>
         <span className="messages-friend-avatar-wrap">
           <Avatar profile={friend.profile} size="small" />
-          <i className={`messages-presence-dot ${friend.status}`} />
+          <i className={`messages-presence-dot ${friend.presence.status}`} />
         </span>
 
         <span className="messages-friend-copy">
           <strong>{profileName(friend.profile)}</strong>
-          <small className={`status-${friend.status}`}>{labels[friend.status]}</small>
+          <small className={`status-${friend.presence.status}`}>{presenceActivity(friend.presence)}</small>
         </span>
       </button>
 
       <div className="messages-friend-actions">
         <button type="button" onClick={onMessage} title="Envoyer un message" aria-label="Envoyer un message">
-          ✦
+          <Icon name="message-circle" size={16} />
         </button>
         <button type="button" onClick={onProfile} title="Voir le profil" aria-label="Voir le profil">
-          •••
+          <Icon name="more-horizontal" size={17} />
         </button>
       </div>
     </div>
@@ -861,7 +843,10 @@ function ConversationItem({
       className={`messages-conversation ${active ? "active" : ""}`}
       onClick={onClick}
     >
-      <Avatar profile={item.profile} size="small" />
+      <span className="messages-friend-avatar-wrap">
+        <Avatar profile={item.profile} size="small" />
+        <i className={`messages-presence-dot ${item.presence.status}`} />
+      </span>
 
       <span className="messages-conversation-copy">
         <span className="messages-conversation-top">
@@ -933,6 +918,14 @@ function Avatar({
 
 function profileName(profile: Profile) {
   return profile.display_name || profile.username || "Joueur GameMate";
+}
+
+function offlinePresence(userId: string): PresenceSnapshot {
+  return { user_id: userId, status: "offline", custom_status: null, activity_game_id: null, activity_game_name: null, activity_text: null, last_seen_at: null };
+}
+
+function presenceRank(status: PresenceStatus) {
+  return status === "online" ? 0 : status === "away" ? 1 : status === "dnd" ? 2 : 3;
 }
 
 function shortTime(value: string) {

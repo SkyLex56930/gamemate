@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase";
 import { playNotificationSound } from "../lib/audio";
-import { Icon } from "./Icon";
 import "./NotificationCenter.css";
 
 type Props = {
@@ -71,18 +70,6 @@ type SquadSessionNotificationRow = {
   created_at: string;
 };
 
-type ScheduledSessionNotificationRow = {
-  id: string;
-  squad_id: string;
-  scheduled_session_id: string;
-  recipient_id: string;
-  kind: string;
-  title: string;
-  message: string;
-  read_at: string | null;
-  created_at: string;
-};
-
 type FriendNotification = {
   kind: "friend";
   id: string;
@@ -114,7 +101,6 @@ type GameSessionNotification = {
   squadId: string;
   title: string;
   message: string;
-  targetTab: "session" | "planning";
 };
 
 type LfgNotificationRow = {
@@ -213,7 +199,7 @@ export default function NotificationCenter({
       return;
     }
 
-    const [inviteResult, sessionResult, scheduledResult, deferredResult, friendResult, lfgCountResult] = await Promise.all([
+    const [inviteResult, sessionResult, deferredResult, friendResult, lfgCountResult] = await Promise.all([
       supabase
         .from("squad_invites")
         .select("id")
@@ -221,11 +207,6 @@ export default function NotificationCenter({
         .eq("status", "pending"),
       supabase
         .from("squad_session_notifications")
-        .select("id", { count: "exact", head: true })
-        .eq("recipient_id", userId)
-        .is("read_at", null),
-      supabase
-        .from("squad_scheduled_session_notifications")
         .select("id", { count: "exact", head: true })
         .eq("recipient_id", userId)
         .is("read_at", null),
@@ -256,11 +237,7 @@ export default function NotificationCenter({
         (request) => deferredFriendIds.has(request.id)
       ).length;
       setDeferredFriendCount(activeDeferredFriendCount);
-      setSquadCount(
-        activeSquadInvites
-        + (sessionResult.error ? 0 : sessionResult.count ?? 0)
-        + (scheduledResult.error ? 0 : scheduledResult.count ?? 0)
-      );
+      setSquadCount(activeSquadInvites + (sessionResult.error ? 0 : sessionResult.count ?? 0));
     }
 
     if (lfgCountResult.error) {
@@ -289,7 +266,7 @@ export default function NotificationCenter({
     setLoading(true);
     setError("");
 
-    const [friendshipsResult, conversationsResult, squadInvitesResult, gameSessionsResult, scheduledSessionsResult, deferredResult, lfgResult] =
+    const [friendshipsResult, conversationsResult, squadInvitesResult, gameSessionsResult, deferredResult, lfgResult] =
       await Promise.all([
         supabase
           .from("friendships")
@@ -310,13 +287,6 @@ export default function NotificationCenter({
         supabase
           .from("squad_session_notifications")
           .select("id, squad_id, session_id, recipient_id, kind, title, message, read_at, created_at")
-          .eq("recipient_id", userId)
-          .is("read_at", null)
-          .order("created_at", { ascending: false })
-          .limit(20),
-        supabase
-          .from("squad_scheduled_session_notifications")
-          .select("id, squad_id, scheduled_session_id, recipient_id, kind, title, message, read_at, created_at")
           .eq("recipient_id", userId)
           .is("read_at", null)
           .order("created_at", { ascending: false })
@@ -353,9 +323,6 @@ export default function NotificationCenter({
     const gameSessionRows = gameSessionsResult.error
       ? []
       : ((gameSessionsResult.data ?? []) as SquadSessionNotificationRow[]);
-    const scheduledSessionRows = scheduledSessionsResult.error
-      ? []
-      : ((scheduledSessionsResult.data ?? []) as ScheduledSessionNotificationRow[]);
     const lfgRows = lfgResult.error
       ? []
       : ((lfgResult.data ?? []) as LfgNotificationRow[]);
@@ -371,9 +338,7 @@ export default function NotificationCenter({
     );
     setDeferredFriendCount(friendships.filter((request) => deferredFriendIds.has(request.id)).length);
     setSquadCount(
-      squadInvites.filter((invite) => !deferredSquadIds.has(invite.id)).length
-      + gameSessionRows.length
-      + scheduledSessionRows.length
+      squadInvites.filter((invite) => !deferredSquadIds.has(invite.id)).length + gameSessionRows.length
     );
 
     const conversationIds = conversations.map((conversation) => conversation.id);
@@ -524,26 +489,14 @@ export default function NotificationCenter({
     setLaterSquadNotifications(deferredSquadItems);
 
     setGameSessionNotifications(
-      [
-        ...gameSessionRows.map((notification) => ({
-          kind: "game_session" as const,
-          id: notification.id,
-          createdAt: notification.created_at,
-          squadId: notification.squad_id,
-          title: notification.title,
-          message: notification.message,
-          targetTab: "session" as const,
-        })),
-        ...scheduledSessionRows.map((notification) => ({
-          kind: "game_session" as const,
-          id: notification.id,
-          createdAt: notification.created_at,
-          squadId: notification.squad_id,
-          title: notification.title,
-          message: notification.message,
-          targetTab: "planning" as const,
-        })),
-      ]
+      gameSessionRows.map((notification) => ({
+        kind: "game_session" as const,
+        id: notification.id,
+        createdAt: notification.created_at,
+        squadId: notification.squad_id,
+        title: notification.title,
+        message: notification.message,
+      }))
     );
 
     setLfgNotifications(
@@ -655,23 +608,6 @@ export default function NotificationCenter({
       )
       .subscribe();
 
-    const scheduledSessionChannel = supabase
-      .channel(`global-notifications-scheduled-sessions:${userId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "squad_scheduled_session_notifications",
-          filter: `recipient_id=eq.${userId}`,
-        },
-        () => {
-          void loadSquadCount();
-          if (open) void loadNotifications();
-        }
-      )
-      .subscribe();
-
     const deferredChannel = supabase
       .channel(`global-notifications-deferred:${userId}`)
       .on(
@@ -710,7 +646,6 @@ export default function NotificationCenter({
       void supabase.removeChannel(messageChannel);
       void supabase.removeChannel(squadChannel);
       void supabase.removeChannel(gameSessionChannel);
-      void supabase.removeChannel(scheduledSessionChannel);
       void supabase.removeChannel(deferredChannel);
       void supabase.removeChannel(lfgNotificationChannel);
     };
@@ -855,24 +790,21 @@ export default function NotificationCenter({
     setWorkingId(null);
   }
 
-  async function openGameSessionNotification(item: GameSessionNotification) {
-    setWorkingId(item.id);
-    const table = item.targetTab === "planning"
-      ? "squad_scheduled_session_notifications"
-      : "squad_session_notifications";
+  async function openGameSessionNotification(id: string) {
+    setWorkingId(id);
     const { error: updateError } = await supabase
-      .from(table)
+      .from("squad_session_notifications")
       .update({ read_at: new Date().toISOString() })
-      .eq("id", item.id)
+      .eq("id", id)
       .eq("recipient_id", userId);
 
     if (updateError) setError("Impossible de marquer cette notification comme lue.");
     else {
       setOpen(false);
       await loadSquadCount();
-      sessionStorage.setItem("gamemate-open-squad-tab", item.targetTab);
+      sessionStorage.setItem("gamemate-open-squad-tab", "session");
       window.dispatchEvent(
-        new CustomEvent("gamemate:open-squad-tab", { detail: item.targetTab })
+        new CustomEvent("gamemate:open-squad-tab", { detail: "session" })
       );
       onOpenSquads();
     }
@@ -1030,7 +962,7 @@ export default function NotificationCenter({
             ) : view === "now" ? (
               items.length === 0 ? (
                 <div className="notification-empty">
-                  <div className="notification-empty-icon"><Icon name="check" /></div>
+                  <div className="notification-empty-icon">✓</div>
                   <strong>Tout est calme.</strong>
                   <p>Tu n’as aucune notification immédiate.</p>
                 </div>
@@ -1075,7 +1007,7 @@ export default function NotificationCenter({
                       key={`game-session-${item.id}`}
                       item={item}
                       working={workingId === item.id}
-                      onOpen={() => void openGameSessionNotification(item)}
+                      onOpen={() => void openGameSessionNotification(item.id)}
                     />
                   );
                 }
@@ -1291,7 +1223,7 @@ function GameSessionItem({
       disabled={working}
       onClick={onOpen}
     >
-      <span className="notification-session-icon"><Icon name="play" size={17} /></span>
+      <span className="notification-session-icon">▶</span>
       <span className="notification-item-copy">
         <strong>{item.title}</strong>
         <span>{item.message}</span>

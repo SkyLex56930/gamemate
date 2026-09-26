@@ -1,19 +1,28 @@
-import { useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase";
 import { playMessageSendSound, playNotificationSound, soundPreferenceKeys } from "../lib/audio";
 import { audioDevicePreferenceKeys } from "../lib/mediaDevices";
 import AudioDeviceSettings from "../components/AudioDeviceSettings";
+import { Icon, type IconName } from "../components/Icon";
+import {
+  presenceDescription,
+  presenceLabel,
+  presenceStorageKeys,
+  readPresenceCustomStatus,
+  readPresenceStatus,
+  type OwnPresenceStatus,
+} from "../lib/presence";
 import "./SettingsPage.css";
 
 type UiScale = "compact" | "normal" | "large" | "xlarge";
 type PerfPreset = "eco" | "balanced" | "high" | "ultra" | "custom";
-type PresenceStatus = "online" | "busy" | "offline";
 type StartupSection = "home" | "play" | "friends" | "messages";
 type NavigationMode = "full" | "compact";
 type Accent = "violet" | "cyan" | "magenta" | "emerald";
 type Density = "comfortable" | "compact";
 type Tab = "overview" | "appearance" | "performance" | "audio" | "social" | "system";
+type PresenceGame = { id: number; name: string };
 
 export type AppearanceSettings = {
   accent: Accent;
@@ -48,13 +57,13 @@ type Props = {
   onLogout: () => void;
 };
 
-const tabs: Array<{ id: Tab; label: string; hint: string; icon: string }> = [
-  { id: "overview", label: "Vue d’ensemble", hint: "État du Companion", icon: "⌂" },
-  { id: "appearance", label: "Apparence", hint: "Interface et accessibilité", icon: "✦" },
-  { id: "performance", label: "Performances", hint: "Qualité et ressources", icon: "⚡" },
-  { id: "audio", label: "Audio & alertes", hint: "Volumes et notifications", icon: "♪" },
-  { id: "social", label: "Social", hint: "Présence et messages", icon: "◉" },
-  { id: "system", label: "Compte & système", hint: "Session et configuration", icon: "⚙" },
+const tabs: Array<{ id: Tab; label: string; hint: string; icon: IconName }> = [
+  { id: "overview", label: "Vue d’ensemble", hint: "État du Companion", icon: "home" },
+  { id: "appearance", label: "Apparence", hint: "Interface et accessibilité", icon: "palette" },
+  { id: "performance", label: "Performances", hint: "Qualité et ressources", icon: "zap" },
+  { id: "audio", label: "Audio & alertes", hint: "Volumes et notifications", icon: "volume-2" },
+  { id: "social", label: "Social", hint: "Présence et messages", icon: "users" },
+  { id: "system", label: "Compte & système", hint: "Session et configuration", icon: "settings" },
 ];
 
 const performancePresets: Record<Exclude<PerfPreset, "custom">, PerformanceSettings> = {
@@ -82,7 +91,10 @@ const LOCAL_SETTING_KEYS = [
   audioDevicePreferenceKeys.echoCancellation,
   audioDevicePreferenceKeys.noiseSuppression,
   audioDevicePreferenceKeys.autoGainControl,
-  "gamemate-presence-status",
+  presenceStorageKeys.status,
+  presenceStorageKeys.customStatus,
+  presenceStorageKeys.activityGameId,
+  presenceStorageKeys.activityText,
   "gamemate-enter-to-send",
 ];
 
@@ -107,11 +119,6 @@ function readStartupSection(): StartupSection {
   return value === "play" || value === "friends" || value === "messages" ? value : "home";
 }
 
-function readPresence(): PresenceStatus {
-  const value = localStorage.getItem("gamemate-presence-status");
-  return value === "busy" || value === "offline" ? value : "online";
-}
-
 export default function SettingsPage({
   session,
   displayName,
@@ -130,7 +137,12 @@ export default function SettingsPage({
 }: Props) {
   const [tab, setTab] = useState<Tab>("overview");
   const [startupSection, setStartupSection] = useState<StartupSection>(readStartupSection);
-  const [presence, setPresence] = useState<PresenceStatus>(readPresence);
+  const [presence, setPresence] = useState<OwnPresenceStatus>(readPresenceStatus);
+  const [customStatus, setCustomStatus] = useState(readPresenceCustomStatus);
+  const [activityGameId, setActivityGameId] = useState(() => localStorage.getItem(presenceStorageKeys.activityGameId) ?? "");
+  const [activityText, setActivityText] = useState(() => localStorage.getItem(presenceStorageKeys.activityText) ?? "");
+  const [presenceGames, setPresenceGames] = useState<PresenceGame[]>([]);
+  const [savingPresence, setSavingPresence] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(() => readBool(soundPreferenceKeys.all));
   const [notificationSound, setNotificationSound] = useState(() => readBool(soundPreferenceKeys.receive));
   const [messageSendSound, setMessageSendSound] = useState(() => readBool(soundPreferenceKeys.send));
@@ -143,6 +155,40 @@ export default function SettingsPage({
 
   const accountEmail = session?.user?.email ?? null;
   const activePreset = useMemo(() => performance.preset, [performance.preset]);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadPresenceSettings() {
+      const [gamesResult, presenceResult] = await Promise.all([
+        supabase.from("games").select("id, name").eq("is_active", true).order("name"),
+        session ? supabase.rpc("get_my_presence_v15") : Promise.resolve({ data: null, error: null }),
+      ]);
+
+      if (!active) return;
+      if (!gamesResult.error) setPresenceGames((gamesResult.data ?? []) as PresenceGame[]);
+      if (!session) return;
+
+      const { data, error } = presenceResult;
+      if (!active || error || !data) return;
+      const row = data as {
+        status?: string;
+        custom_status?: string | null;
+        activity_game_id?: number | null;
+        activity_text?: string | null;
+      };
+      const nextStatus: OwnPresenceStatus = row.status === "away" || row.status === "dnd" || row.status === "invisible"
+        ? row.status
+        : "online";
+      setPresence(nextStatus);
+      setCustomStatus(row.custom_status ?? "");
+      setActivityGameId(row.activity_game_id != null ? String(row.activity_game_id) : "");
+      setActivityText(row.activity_text ?? "");
+    }
+
+    void loadPresenceSettings();
+    return () => { active = false; };
+  }, [session]);
 
   function announce(message: string) {
     setNotice(message);
@@ -165,13 +211,18 @@ export default function SettingsPage({
     localStorage.setItem(key, String(value));
   }
 
-  async function changePresence(value: PresenceStatus) {
+  async function changePresence(value: OwnPresenceStatus) {
     setPresence(value);
-    localStorage.setItem("gamemate-presence-status", value);
+    localStorage.setItem(presenceStorageKeys.status, value);
     window.dispatchEvent(new Event("gamemate-presence-status-changed"));
 
     if (session) {
-      const { error } = await supabase.rpc("set_my_presence", { p_status: value });
+      const { error } = await supabase.rpc("update_my_presence_v15", {
+        p_status: value,
+        p_custom_status: customStatus.trim() || null,
+        p_activity_game_id: activityGameId ? Number(activityGameId) : null,
+        p_activity_text: activityText.trim() || null,
+      });
       if (error) {
         console.error("set_my_presence:", error);
         announce("La présence locale est enregistrée, mais la synchronisation a échoué.");
@@ -181,9 +232,36 @@ export default function SettingsPage({
     announce("Statut de présence synchronisé.");
   }
 
+  async function savePresenceProfile() {
+    setSavingPresence(true);
+    localStorage.setItem(presenceStorageKeys.status, presence);
+    localStorage.setItem(presenceStorageKeys.customStatus, customStatus.trim());
+    localStorage.setItem(presenceStorageKeys.activityGameId, activityGameId);
+    localStorage.setItem(presenceStorageKeys.activityText, activityText.trim());
+
+    if (session) {
+      const { error } = await supabase.rpc("update_my_presence_v15", {
+        p_status: presence,
+        p_custom_status: customStatus.trim() || null,
+        p_activity_game_id: activityGameId ? Number(activityGameId) : null,
+        p_activity_text: activityText.trim() || null,
+      });
+      if (error) {
+        console.error("update_my_presence_v15:", error);
+        announce("Impossible de synchroniser ton activité.");
+        setSavingPresence(false);
+        return;
+      }
+    }
+
+    window.dispatchEvent(new Event("gamemate-presence-status-changed"));
+    announce(session ? "Présence et activité synchronisées." : "Présence enregistrée sur cet appareil.");
+    setSavingPresence(false);
+  }
+
   function exportConfiguration() {
     const settings = Object.fromEntries(LOCAL_SETTING_KEYS.map((key) => [key, localStorage.getItem(key)]));
-    const blob = new Blob([JSON.stringify({ version: 9, exportedAt: new Date().toISOString(), settings }, null, 2)], { type: "application/json" });
+    const blob = new Blob([JSON.stringify({ version: 15, exportedAt: new Date().toISOString(), settings }, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
@@ -249,10 +327,10 @@ export default function SettingsPage({
       </header>
 
       <section className="settings-health-grid" aria-label="État du Companion">
-        <HealthCard icon="◈" label="Profil visuel" value={appearance.accent} detail={appearance.highContrast ? "Contraste renforcé" : "Contraste standard"} />
-        <HealthCard icon="⚡" label="Moteur visuel" value={performance.preset} detail={`${performance.motion}% animations`} />
-        <HealthCard icon="♪" label="Audio" value={soundEnabled ? `${masterVolume}%` : "Coupé"} detail="Volume principal" />
-        <HealthCard icon="●" label="Présence" value={presenceLabel(presence)} detail={session ? "Synchronisée" : "Mode local"} />
+        <HealthCard icon="palette" label="Profil visuel" value={appearance.accent} detail={appearance.highContrast ? "Contraste renforcé" : "Contraste standard"} />
+        <HealthCard icon="gauge" label="Moteur visuel" value={performance.preset} detail={`${performance.motion}% animations`} />
+        <HealthCard icon="volume-2" label="Audio" value={soundEnabled ? `${masterVolume}%` : "Coupé"} detail="Volume principal" />
+        <HealthCard icon="wifi" label="Présence" value={presenceLabel(presence)} detail={session ? "Synchronisée" : "Mode local"} />
       </section>
 
       <div className="settings-workspace">
@@ -265,24 +343,24 @@ export default function SettingsPage({
               className={tab === item.id ? "active" : ""}
               onClick={() => { setTab(item.id); setNotice(""); }}
             >
-              <span className="settings-nav-icon">{item.icon}</span>
+              <span className="settings-nav-icon"><Icon name={item.icon} /></span>
               <span className="settings-nav-copy"><strong>{item.label}</strong><small>{item.hint}</small></span>
-              <b>›</b>
+              <Icon name="chevron-right" size={15} />
             </button>
           ))}
         </aside>
 
         <main className="settings-content">
-          {notice && <div className="settings-notice" role="status"><span>✓</span>{notice}</div>}
+          {notice && <div className="settings-notice" role="status"><span><Icon name="check" size={16} /></span>{notice}</div>}
 
           {tab === "overview" && (
             <>
               <SettingsPanel index="01" kicker="DÉMARRAGE" title="Ouverture du Companion" description="Choisis ton point d’entrée quand GameMate démarre.">
                 <ChoiceGrid>
-                  <Choice active={startupSection === "home"} icon="⌂" title="Accueil" subtitle="Vue d’ensemble" onClick={() => saveStartup("home")} />
-                  <Choice active={startupSection === "play"} icon="▶" title="Play Now" subtitle="Lancer une session" onClick={() => saveStartup("play")} />
-                  <Choice active={startupSection === "friends"} icon="♢" title="Amis" subtitle="Activité sociale" onClick={() => saveStartup("friends")} />
-                  <Choice active={startupSection === "messages"} icon="✦" title="Messages" subtitle="Conversations" onClick={() => saveStartup("messages")} />
+                  <Choice active={startupSection === "home"} icon="home" title="Accueil" subtitle="Vue d’ensemble" onClick={() => saveStartup("home")} />
+                  <Choice active={startupSection === "play"} icon="play" title="Play Now" subtitle="Lancer une session" onClick={() => saveStartup("play")} />
+                  <Choice active={startupSection === "friends"} icon="users" title="Amis" subtitle="Activité sociale" onClick={() => saveStartup("friends")} />
+                  <Choice active={startupSection === "messages"} icon="message-circle" title="Messages" subtitle="Conversations" onClick={() => saveStartup("messages")} />
                 </ChoiceGrid>
               </SettingsPanel>
               <SettingsPanel index="02" kicker="SIGNAL" title="Indicateurs d’attention" description="Garde les informations importantes visibles dans la navigation.">
@@ -297,7 +375,7 @@ export default function SettingsPage({
                 <div className="settings-accent-grid">
                   {(["violet", "cyan", "magenta", "emerald"] as Accent[]).map((accent) => (
                     <button key={accent} type="button" className={`settings-accent ${accent} ${appearance.accent === accent ? "active" : ""}`} onClick={() => onAppearanceChange({ ...appearance, accent })}>
-                      <i /><span><strong>{accentLabel(accent)}</strong><small>{accent === "violet" ? "Signature GameMate" : "Palette alternative"}</small></span><b>✓</b>
+                      <i /><span><strong>{accentLabel(accent)}</strong><small>{accent === "violet" ? "Signature GameMate" : "Palette alternative"}</small></span><b><Icon name="check" size={15} /></b>
                     </button>
                   ))}
                 </div>
@@ -327,7 +405,7 @@ export default function SettingsPage({
               <SettingsPanel index="01" kicker="PRÉRÉGLAGES" title="Profil de rendu" description="Chaque profil agit sur les effets du Companion.">
                 <ChoiceGrid>
                   {(["eco", "balanced", "high", "ultra"] as const).map((preset) => (
-                    <Choice key={preset} active={activePreset === preset} icon={preset === "eco" ? "◌" : preset === "ultra" ? "✦" : "⚡"} title={presetLabel(preset)} subtitle={presetDescription(preset)} onClick={() => onPerformanceChange(performancePresets[preset])} />
+                    <Choice key={preset} active={activePreset === preset} icon={preset === "eco" ? "gauge" : preset === "ultra" ? "sparkles" : "zap"} title={presetLabel(preset)} subtitle={presetDescription(preset)} onClick={() => onPerformanceChange(performancePresets[preset])} />
                   ))}
                 </ChoiceGrid>
               </SettingsPanel>
@@ -353,7 +431,7 @@ export default function SettingsPage({
               </SettingsPanel>
               <SettingsPanel index="03" kicker="ROUTAGE" title="Sons et alertes" description="Active séparément les signaux réellement utilisés par GameMate.">
                 <Toggle title="Audio du Companion" description="Interrupteur principal de tous les sons." checked={soundEnabled} onChange={(value) => setSound(soundPreferenceKeys.all, value, setSoundEnabled)} />
-                <Toggle title="Son de notification" description="Joué à la réception d’une notification." checked={notificationSound} disabled={!soundEnabled} actionLabel="Tester" onAction={playNotificationSound} onChange={(value) => setSound(soundPreferenceKeys.receive, value, setNotificationSound)} />
+                <Toggle title="Son de notification" description="Joué à la réception d’une notification, sauf en mode Ne pas déranger." checked={notificationSound} disabled={!soundEnabled} actionLabel="Tester" onAction={() => playNotificationSound(true)} onChange={(value) => setSound(soundPreferenceKeys.receive, value, setNotificationSound)} />
                 <Toggle title="Confirmation d’envoi" description="Jouée après l’envoi réussi d’un message." checked={messageSendSound} disabled={!soundEnabled} actionLabel="Tester" onAction={playMessageSendSound} onChange={(value) => setSound(soundPreferenceKeys.send, value, setMessageSendSound)} />
                 <Toggle title="Badges visuels" description="Complète les sons avec les compteurs dans l’interface." checked={notificationBadges} onChange={onNotificationBadgesChange} />
               </SettingsPanel>
@@ -364,11 +442,33 @@ export default function SettingsPage({
             <>
               <SettingsPanel index="01" kicker="PRÉSENCE" title="Visibilité GameMate" description="Le statut est enregistré et synchronisé avec Supabase quand tu es connecté.">
                 <div className="settings-presence-grid">
-                  {(["online", "busy", "offline"] as PresenceStatus[]).map((status) => (
+                  {(["online", "away", "dnd", "invisible"] as OwnPresenceStatus[]).map((status) => (
                     <button key={status} type="button" className={presence === status ? "active" : ""} onClick={() => void changePresence(status)}>
-                      <i className={status} /><span><strong>{presenceLabel(status)}</strong><small>{presenceDescription(status)}</small></span><b>✓</b>
+                      <i className={status} /><span><strong>{presenceLabel(status)}</strong><small>{presenceDescription(status)}</small></span><b><Icon name="check" size={15} /></b>
                     </button>
                   ))}
+                </div>
+                <div className="settings-presence-profile">
+                  <label>
+                    <span>Statut personnalisé</span>
+                    <input value={customStatus} maxLength={80} placeholder="Ex. Disponible pour du classé" onChange={(event) => setCustomStatus(event.target.value)} />
+                    <small>{customStatus.length}/80</small>
+                  </label>
+                  <label>
+                    <span>Jeu actuel</span>
+                    <select value={activityGameId} onChange={(event) => setActivityGameId(event.target.value)}>
+                      <option value="">Aucun jeu affiché</option>
+                      {presenceGames.map((game) => <option key={game.id} value={game.id}>{game.name}</option>)}
+                    </select>
+                  </label>
+                  <label>
+                    <span>Activité</span>
+                    <input value={activityText} maxLength={80} placeholder="Ex. Recherche 2 joueurs" onChange={(event) => setActivityText(event.target.value)} />
+                    <small>{activityText.length}/80</small>
+                  </label>
+                  <button type="button" className="settings-primary-btn" disabled={savingPresence} onClick={() => void savePresenceProfile()}>
+                    {savingPresence ? "Synchronisation…" : "Enregistrer ma présence"}
+                  </button>
                 </div>
               </SettingsPanel>
               <SettingsPanel index="02" kicker="MESSAGERIE" title="Comportement du chat" description="Personnalise la saisie sans changer tes conversations.">
@@ -388,9 +488,9 @@ export default function SettingsPage({
               </SettingsPanel>
               <SettingsPanel index="02" kicker="CONFIGURATION" title="Sauvegarde locale" description="Transfère tes préférences sur un autre poste sans exporter tes données de compte.">
                 <div className="settings-action-grid">
-                  <button type="button" onClick={exportConfiguration}><span>⇩</span><strong>Exporter</strong><small>Télécharger un fichier JSON</small></button>
-                  <button type="button" onClick={() => importInput.current?.click()}><span>⇧</span><strong>Importer</strong><small>Restaurer une configuration</small></button>
-                  <button type="button" onClick={() => void copyDiagnostics()}><span>⌁</span><strong>Diagnostic</strong><small>Copier les informations système</small></button>
+                  <button type="button" onClick={exportConfiguration}><span><Icon name="download" /></span><strong>Exporter</strong><small>Télécharger un fichier JSON</small></button>
+                  <button type="button" onClick={() => importInput.current?.click()}><span><Icon name="upload" /></span><strong>Importer</strong><small>Restaurer une configuration</small></button>
+                  <button type="button" onClick={() => void copyDiagnostics()}><span><Icon name="terminal" /></span><strong>Diagnostic</strong><small>Copier les informations système</small></button>
                 </div>
                 <input ref={importInput} className="settings-file-input" type="file" accept="application/json,.json" onChange={(event) => void importConfiguration(event.target.files?.[0])} />
               </SettingsPanel>
@@ -405,8 +505,8 @@ export default function SettingsPage({
   );
 }
 
-function HealthCard({ icon, label, value, detail }: { icon: string; label: string; value: string; detail: string }) {
-  return <article className="settings-health"><span>{icon}</span><div><small>{label}</small><strong>{value}</strong><em>{detail}</em></div></article>;
+function HealthCard({ icon, label, value, detail }: { icon: IconName; label: string; value: string; detail: string }) {
+  return <article className="settings-health"><span><Icon name={icon} /></span><div><small>{label}</small><strong>{value}</strong><em>{detail}</em></div></article>;
 }
 
 function SettingsPanel({ index, kicker, title, description, children }: { index: string; kicker: string; title: string; description: string; children: ReactNode }) {
@@ -415,8 +515,8 @@ function SettingsPanel({ index, kicker, title, description, children }: { index:
 
 function ChoiceGrid({ children }: { children: ReactNode }) { return <div className="settings-choice-grid">{children}</div>; }
 
-function Choice({ active, icon, title, subtitle, onClick }: { active: boolean; icon?: string; title: string; subtitle: string; onClick: () => void }) {
-  return <button type="button" className={`settings-choice ${active ? "active" : ""}`} onClick={onClick}>{icon && <span>{icon}</span>}<div><strong>{title}</strong><small>{subtitle}</small></div><b>✓</b></button>;
+function Choice({ active, icon, title, subtitle, onClick }: { active: boolean; icon?: IconName; title: string; subtitle: string; onClick: () => void }) {
+  return <button type="button" className={`settings-choice ${active ? "active" : ""}`} onClick={onClick}>{icon && <span><Icon name={icon} /></span>}<div><strong>{title}</strong><small>{subtitle}</small></div><b><Icon name="check" size={15} /></b></button>;
 }
 
 function Toggle({ title, description, checked, disabled = false, actionLabel, onAction, onChange }: { title: string; description: string; checked: boolean; disabled?: boolean; actionLabel?: string; onAction?: () => void; onChange: (value: boolean) => void }) {
@@ -432,5 +532,3 @@ function scaleLabel(value: UiScale) { return value === "compact" ? "Compact" : v
 function scalePercent(value: UiScale) { return value === "compact" ? "90 %" : value === "normal" ? "100 %" : value === "large" ? "115 %" : "130 %"; }
 function presetLabel(value: Exclude<PerfPreset, "custom">) { return value === "eco" ? "Éco" : value === "balanced" ? "Équilibré" : value === "high" ? "Élevé" : "Ultra"; }
 function presetDescription(value: Exclude<PerfPreset, "custom">) { return value === "eco" ? "GPU minimum" : value === "balanced" ? "Confort stable" : value === "high" ? "Expérience premium" : "Effets maximum"; }
-function presenceLabel(value: PresenceStatus) { return value === "online" ? "En ligne" : value === "busy" ? "Occupé" : "Hors ligne"; }
-function presenceDescription(value: PresenceStatus) { return value === "online" ? "Disponible pour jouer" : value === "busy" ? "Présent, pas disponible" : "Apparaître invisible"; }

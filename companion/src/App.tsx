@@ -1,5 +1,5 @@
 import FindMatesScreen from "./pages/FindMatesPage";
-import { FormEvent, useEffect, useState, type CSSProperties } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
@@ -15,6 +15,10 @@ import TestModePage from "./pages/TestModePage";
 import SettingsPage, { type AppearanceSettings } from "./pages/SettingsPage";
 import SupportPage from "./pages/SupportPage";
 import NotificationCenter from "./components/NotificationCenter";
+import type { VoiceSessionSnapshot } from "./components/SquadVoiceRoom";
+import HomeDashboard from "./components/HomeDashboard";
+import { Icon, type IconName } from "./components/Icon";
+import { presenceLabel, presenceStorageKeys, readPresenceCustomStatus, readPresenceStatus, type OwnPresenceStatus } from "./lib/presence";
 
 import "./App.css";
 import "./CompanionV8.css";
@@ -23,8 +27,6 @@ type Section = "home" | "play" | "mates" | "squads" | "friends" | "messages" | "
 type UiScale = "compact" | "normal" | "large" | "xlarge";
 type PerfPreset = "eco" | "balanced" | "high" | "ultra" | "custom";
 type NavigationMode = "full" | "compact";
-
-type PresenceStatus = "online" | "busy" | "offline";
 
 type ModerationSanctionType = "warning" | "mute" | "suspension" | "ban";
 
@@ -58,11 +60,6 @@ function formatSanctionDate(value: string | null) {
   });
 }
 
-
-function readPresenceStatus(): PresenceStatus {
-  const saved = localStorage.getItem("gamemate-presence-status");
-  return saved === "busy" || saved === "offline" ? saved : "online";
-}
 
 type Profile = {
   username: string | null;
@@ -199,6 +196,26 @@ function App() {
   const [appearance, setAppearance] = useState<AppearanceSettings>(readAppearanceSettings);
   const [windowActive, setWindowActive] = useState(true);
   const [moderationState, setModerationState] = useState<ModerationState>(EMPTY_MODERATION_STATE);
+  const [voiceSession, setVoiceSession] = useState<VoiceSessionSnapshot | null>(null);
+  const [showQuickAccess, setShowQuickAccess] = useState(false);
+  const [myPresenceStatus, setMyPresenceStatus] = useState<OwnPresenceStatus>(readPresenceStatus);
+  const [myPresenceText, setMyPresenceText] = useState(readPresenceCustomStatus);
+
+  const handleVoiceStateChange = useCallback((snapshot: VoiceSessionSnapshot | null) => {
+    setVoiceSession(snapshot && (snapshot.joined || snapshot.connecting) ? snapshot : null);
+  }, []);
+
+  useEffect(() => {
+    const handleQuickAccessShortcut = (event: globalThis.KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setShowQuickAccess((current) => !current);
+      }
+    };
+
+    window.addEventListener("keydown", handleQuickAccessShortcut);
+    return () => window.removeEventListener("keydown", handleQuickAccessShortcut);
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -255,13 +272,34 @@ function App() {
       if (error) console.error("Presence:", error);
     };
 
-    void publishPresence();
+    const hydrateAndPublishPresence = async () => {
+      const presenceRequest = supabase.rpc("get_my_presence_v15");
+      const publishRequest = publishPresence();
+      const { data } = await presenceRequest;
+      if (!stopped && data) {
+        const row = data as {
+          custom_status?: string | null;
+          activity_game_id?: number | null;
+          activity_text?: string | null;
+        };
+        const customStatus = row.custom_status ?? "";
+        setMyPresenceText(customStatus);
+        localStorage.setItem(presenceStorageKeys.customStatus, customStatus);
+        localStorage.setItem(presenceStorageKeys.activityGameId, row.activity_game_id != null ? String(row.activity_game_id) : "");
+        localStorage.setItem(presenceStorageKeys.activityText, row.activity_text ?? "");
+      }
+      await publishRequest;
+    };
+
+    void hydrateAndPublishPresence();
 
     const heartbeat = window.setInterval(() => {
       void publishPresence();
     }, 30000);
 
     const onPresenceStatusChanged = () => {
+      setMyPresenceStatus(readPresenceStatus());
+      setMyPresenceText(readPresenceCustomStatus());
       void publishPresence();
     };
 
@@ -517,6 +555,7 @@ function App() {
   }
 
   async function handleLogout() {
+    window.dispatchEvent(new CustomEvent("gamemate:voice-command", { detail: { action: "leave" } }));
     await supabase.auth.signOut();
     setPublicProfileUserId(null);
     setSession(null);
@@ -821,9 +860,9 @@ function App() {
           onMouseDown={(event) => event.stopPropagation()}
           onDoubleClick={(event) => event.stopPropagation()}
         >
-          <button type="button" onClick={() => void minimizeWindow()} aria-label="Réduire">—</button>
-          <button type="button" onClick={() => void toggleMaximizeWindow()} aria-label="Agrandir">□</button>
-          <button type="button" className="close" onClick={() => void closeWindow()} aria-label="Fermer">×</button>
+          <button type="button" onClick={() => void minimizeWindow()} aria-label="Réduire"><Icon name="minus" size={14} /></button>
+          <button type="button" onClick={() => void toggleMaximizeWindow()} aria-label="Agrandir"><Icon name="maximize" size={11} /></button>
+          <button type="button" className="close" onClick={() => void closeWindow()} aria-label="Fermer"><Icon name="close" size={14} /></button>
         </div>
       </header>
 
@@ -840,18 +879,18 @@ function App() {
           <nav className="gm-nav">
             <div className="gm-nav-group">
               <span className="gm-nav-label">PRINCIPAL</span>
-              <NavItem active={section === "home"} icon="⌂" label="Accueil" onClick={() => navigateTo("home")} />
-              <NavItem active={section === "play"} icon="▶" label="Play Now" onClick={() => navigateTo("play")} />
-              <NavItem active={section === "mates"} icon="⌕" label="Trouver des mates" onClick={() => navigateTo("mates")} />
+              <NavItem active={section === "home"} icon="home" label="Accueil" onClick={() => navigateTo("home")} />
+              <NavItem active={section === "play"} icon="play" label="Play Now" onClick={() => navigateTo("play")} />
+              <NavItem active={section === "mates"} icon="search" label="Trouver des mates" onClick={() => navigateTo("mates")} />
             </div>
 
             <div className="gm-nav-group">
               <span className="gm-nav-label">SOCIAL</span>
-              <NavItem active={section === "squads"} icon="◇" label="Squads" onClick={() => navigateTo("squads")} />
-              <NavItem active={section === "friends"} icon="♢" label="Amis" badge={notificationBadges ? pendingFriendRequests : 0} onClick={() => navigateTo("friends")} />
+              <NavItem active={section === "squads"} icon="users" label="Squads" onClick={() => navigateTo("squads")} />
+              <NavItem active={section === "friends"} icon="user-check" label="Amis" badge={notificationBadges ? pendingFriendRequests : 0} onClick={() => navigateTo("friends")} />
               <NavItem
                 active={section === "messages"}
-                icon="✦"
+                icon="message-circle"
                 label="Messages"
                 badge={notificationBadges ? unreadMessages : 0}
                 onClick={() => {
@@ -863,10 +902,10 @@ function App() {
 
             <div className="gm-nav-group">
               <span className="gm-nav-label">COMPTE</span>
-              <NavItem active={section === "profile"} icon="◌" label="Mon profil" onClick={() => navigateTo("profile")} />
-              <NavItem active={section === "support"} icon="?" label="Support" badge={notificationBadges ? openSupportTickets : 0} onClick={() => navigateTo("support")} />
-              <NavItem active={section === "settings"} icon="⚙" label="Paramètres" onClick={() => navigateTo("settings")} />
-              <NavItem active={section === "test"} icon="⌁" label="Mode test" onClick={() => navigateTo("test")} />
+              <NavItem active={section === "profile"} icon="user" label="Mon profil" onClick={() => navigateTo("profile")} />
+              <NavItem active={section === "support"} icon="life-buoy" label="Support" badge={notificationBadges ? openSupportTickets : 0} onClick={() => navigateTo("support")} />
+              <NavItem active={section === "settings"} icon="settings" label="Paramètres" onClick={() => navigateTo("settings")} />
+              <NavItem active={section === "test"} icon="flask" label="Mode test" onClick={() => navigateTo("test")} />
             </div>
           </nav>
 
@@ -891,7 +930,7 @@ function App() {
               </span>
               <span>
                 <strong>{authLoading ? "Chargement..." : displayName}</strong>
-                <small>{session ? "Compte connecté" : "Se connecter"}</small>
+                <small>{session ? (myPresenceText || presenceLabel(myPresenceStatus)) : "Se connecter"}</small>
               </span>
             </button>
           </div>
@@ -907,17 +946,18 @@ function App() {
               onClick={() => setNavOpen((value) => !value)}
               aria-label="Ouvrir le menu"
             >
-              ☰
+              <Icon name="menu" />
             </button>
 
-            <button type="button" className="gm-search" onClick={() => navigateTo("mates")}>
-              <span>⌕</span>
-              <span>Trouver des mates...</span>
+            <button type="button" className="gm-search" onClick={() => setShowQuickAccess(true)} aria-label="Ouvrir l’accès rapide">
+              <Icon name="search" size={17} />
+              <span>Rechercher dans GameMate...</span>
+              <kbd>Ctrl K</kbd>
             </button>
 
             <div className="gm-top-actions">
               <button type="button" className="gm-icon-btn" onClick={() => navigateTo("friends")} aria-label="Amis">
-                ♢
+                <Icon name="user-check" />
                 {notificationBadges && pendingFriendRequests > 0 && <b>{pendingFriendRequests > 99 ? "99+" : pendingFriendRequests}</b>}
               </button>
 
@@ -930,7 +970,7 @@ function App() {
                 }}
                 aria-label="Messages"
               >
-                ◯
+                <Icon name="message-circle" />
                 {notificationBadges && unreadMessages > 0 && <b>{unreadMessages > 99 ? "99+" : unreadMessages}</b>}
               </button>
 
@@ -943,11 +983,12 @@ function App() {
                   navigateTo("messages");
                 }}
                 onOpenSquads={() => navigateTo("squads")}
+                onOpenFindMates={() => navigateTo("mates")}
               />
 
               <button
                 type="button"
-                className="gm-top-profile"
+                className={`gm-top-profile presence-${session ? myPresenceStatus : "offline"}`}
                 onClick={() => session ? navigateTo("profile") : setShowLogin(true)}
               >
                 <span className="gm-top-avatar">
@@ -956,14 +997,15 @@ function App() {
                   ) : (
                     avatarLetter
                   )}
+                  {session && <i className="gm-presence-dot" aria-hidden="true" />}
                 </span>
                 <span>
                   <strong>{displayName}</strong>
-                  <small>{session ? "GameMate" : "Connexion"}</small>
+                  <small>{session ? (myPresenceText || presenceLabel(myPresenceStatus)) : "Connexion"}</small>
                 </span>
               </button>
 
-              <button type="button" className="gm-icon-btn" onClick={() => navigateTo("settings")} aria-label="Paramètres">⚙</button>
+              <button type="button" className="gm-icon-btn" onClick={() => navigateTo("settings")} aria-label="Paramètres"><Icon name="settings" /></button>
             </div>
           </header>
 
@@ -992,6 +1034,23 @@ function App() {
           )}
 
           <main className={`gm-content gm-section-${section}`}>
+            <div
+              className={`gm-persistent-squads ${section === "squads" && !publicProfileUserId ? "" : "is-hidden"}`}
+              aria-hidden={section !== "squads" || Boolean(publicProfileUserId)}
+            >
+              <SquadsPage
+                session={session}
+                onLogin={() => setShowLogin(true)}
+                onOpenFriends={() => navigateTo("friends")}
+                onOpenMessages={(userId) => {
+                  setMessageTargetUserId(userId);
+                  navigateTo("messages");
+                }}
+                onOpenProfile={(userId) => setPublicProfileUserId(userId)}
+                onVoiceStateChange={handleVoiceStateChange}
+              />
+            </div>
+
             {publicProfileUserId ? (
               <PublicProfilePage
                 userId={publicProfileUserId}
@@ -1025,11 +1084,19 @@ function App() {
                     gamingDna={gamingDna}
                     lookingFor={lookingFor}
                     profileCompletion={profileCompletion.percent}
+                    pendingFriendRequests={pendingFriendRequests}
+                    unreadMessages={unreadMessages}
+                    voiceSession={voiceSession}
                     onLogin={() => setShowLogin(true)}
                     onPlay={() => navigateTo("play")}
                     onFindMates={() => navigateTo("mates")}
                     onSquads={() => navigateTo("squads")}
+                    onFriends={() => navigateTo("friends")}
                     onMessages={() => navigateTo("messages")}
+                    onOpenMessage={(userId) => {
+                      setMessageTargetUserId(userId);
+                      navigateTo("messages");
+                    }}
                     onProfile={() => navigateTo("profile")}
                   />
                 )}
@@ -1063,19 +1130,6 @@ function App() {
                     onOpenFriends={() => navigateTo("friends")}
                     onOpenSquads={() => navigateTo("squads")}
                     onOpenSettings={() => navigateTo("profile")}
-                  />
-                )}
-
-                {section === "squads" && (
-                  <SquadsPage
-                    session={session}
-                    onLogin={() => setShowLogin(true)}
-                    onOpenFriends={() => navigateTo("friends")}
-                    onOpenMessages={(userId) => {
-                      setMessageTargetUserId(userId);
-                      navigateTo("messages");
-                    }}
-                    onOpenProfile={(userId) => setPublicProfileUserId(userId)}
                   />
                 )}
 
@@ -1155,11 +1209,23 @@ function App() {
         </section>
       </div>
 
+      {voiceSession && (
+        <VoiceSessionDock
+          session={voiceSession}
+          onOpen={() => {
+            navigateTo("squads");
+            window.dispatchEvent(new CustomEvent("gamemate:open-squad-tab", {
+              detail: { tab: "chat", channelId: voiceSession.channelId },
+            }));
+          }}
+        />
+      )}
+
       {session && moderationState.restricted && blockingSanction && section !== "support" && (
         <div className="gm-sanction-lock">
           <section className={`gm-sanction-lock-card ${blockingSanction.type}`}>
             <div className="gm-sanction-lock-icon">
-              {blockingSanction.type === "ban" ? "×" : "!"}
+              <Icon name={blockingSanction.type === "ban" ? "ban" : "alert-circle"} size={28} />
             </div>
 
             <span className="gm-sanction-lock-kicker">MODÉRATION GAMEMATE</span>
@@ -1232,8 +1298,219 @@ function App() {
           onSubmit={handleLogin}
         />
       )}
+
+      {showQuickAccess && (
+        <QuickAccessModal
+          currentSection={section}
+          connected={Boolean(session)}
+          pendingFriendRequests={notificationBadges ? pendingFriendRequests : 0}
+          unreadMessages={notificationBadges ? unreadMessages : 0}
+          openSupportTickets={notificationBadges ? openSupportTickets : 0}
+          voiceSession={voiceSession}
+          onClose={() => setShowQuickAccess(false)}
+          onLogin={() => {
+            setShowQuickAccess(false);
+            setShowLogin(true);
+          }}
+          onOpenVoice={() => {
+            setShowQuickAccess(false);
+            navigateTo("squads");
+            if (voiceSession) {
+              window.dispatchEvent(new CustomEvent("gamemate:open-squad-tab", {
+                detail: { tab: "chat", channelId: voiceSession.channelId },
+              }));
+            }
+          }}
+          onNavigate={(nextSection) => {
+            setShowQuickAccess(false);
+            if (nextSection === "messages") setMessageTargetUserId(null);
+            navigateTo(nextSection);
+          }}
+        />
+      )}
     </div>
   );
+}
+
+type QuickAccessAction = {
+  id: string;
+  label: string;
+  description: string;
+  keywords: string;
+  icon: IconName;
+  section?: Section;
+  badge?: number;
+  accent?: "cyan" | "violet" | "magenta";
+  onSelect?: () => void;
+};
+
+function QuickAccessModal({
+  currentSection,
+  connected,
+  pendingFriendRequests,
+  unreadMessages,
+  openSupportTickets,
+  voiceSession,
+  onClose,
+  onLogin,
+  onOpenVoice,
+  onNavigate,
+}: {
+  currentSection: Section;
+  connected: boolean;
+  pendingFriendRequests: number;
+  unreadMessages: number;
+  openSupportTickets: number;
+  voiceSession: VoiceSessionSnapshot | null;
+  onClose: () => void;
+  onLogin: () => void;
+  onOpenVoice: () => void;
+  onNavigate: (section: Section) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  const actions = useMemo<QuickAccessAction[]>(() => {
+    const navigation: QuickAccessAction[] = [
+      { id: "home", section: "home", icon: "home", label: "Accueil", description: "Tableau de bord personnalisé", keywords: "accueil dashboard maison" },
+      { id: "play", section: "play", icon: "play", label: "Play Now", description: "Préparer une nouvelle session", keywords: "jouer recherche session rapide" },
+      { id: "mates", section: "mates", icon: "search", label: "Trouver des mates", description: "Matching et annonces en direct", keywords: "joueurs lfg matching recherche" },
+      { id: "squads", section: "squads", icon: "users", label: "Squads", description: "Groupe, chat, vocal et planning", keywords: "equipe groupe vocal planning" },
+      { id: "friends", section: "friends", icon: "user-check", label: "Amis", description: "Amis et demandes reçues", keywords: "amis demandes relations", badge: pendingFriendRequests },
+      { id: "messages", section: "messages", icon: "message-circle", label: "Messages", description: "Conversations privées", keywords: "messages chat conversation", badge: unreadMessages },
+      { id: "profile", section: "profile", icon: "user", label: "Mon profil", description: "Identité, jeux et disponibilités", keywords: "profil compte jeux disponibilité" },
+      { id: "support", section: "support", icon: "life-buoy", label: "Support", description: "Aide et tickets", keywords: "support aide ticket problème", badge: openSupportTickets },
+      { id: "settings", section: "settings", icon: "settings", label: "Paramètres", description: "Audio, apparence et système", keywords: "réglages paramètres audio micro apparence" },
+      { id: "test", section: "test", icon: "flask", label: "Mode test", description: "Outils de validation GameMate", keywords: "test diagnostic validation" },
+    ];
+
+    if (voiceSession) {
+      navigation.unshift({
+        id: "active-voice",
+        section: "squads",
+        icon: voiceSession.muted ? "mic-off" : "headphones",
+        label: `Revenir au vocal · ${voiceSession.channelName}`,
+        description: `${voiceSession.participantCount || 1} connecté${voiceSession.participantCount > 1 ? "s" : ""}${voiceSession.muted ? " · micro coupé" : ""}`,
+        keywords: "vocal salon micro actif rejoindre",
+        accent: "cyan",
+        onSelect: onOpenVoice,
+      });
+    }
+
+    if (!connected) {
+      navigation.unshift({
+        id: "login",
+        icon: "log-in",
+        label: "Se connecter",
+        description: "Ouvrir la connexion GameMate",
+        keywords: "connexion compte login",
+        accent: "violet",
+        onSelect: onLogin,
+      });
+    }
+
+    return navigation;
+  }, [connected, onLogin, onOpenVoice, openSupportTickets, pendingFriendRequests, unreadMessages, voiceSession]);
+
+  const filteredActions = useMemo(() => {
+    const normalizedQuery = normalizeSearch(query.trim());
+    if (!normalizedQuery) return actions;
+    return actions.filter((action) => normalizeSearch(`${action.label} ${action.description} ${action.keywords}`).includes(normalizedQuery));
+  }, [actions, query]);
+
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    setSelectedIndex(0);
+  }, [query]);
+
+  const selectAction = (action: QuickAccessAction) => {
+    if (action.onSelect) action.onSelect();
+    else if (action.section) onNavigate(action.section);
+  };
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      onClose();
+      return;
+    }
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setSelectedIndex((current) => filteredActions.length ? (current + 1) % filteredActions.length : 0);
+      return;
+    }
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setSelectedIndex((current) => filteredActions.length ? (current - 1 + filteredActions.length) % filteredActions.length : 0);
+      return;
+    }
+    if (event.key === "Enter" && filteredActions[selectedIndex]) {
+      event.preventDefault();
+      selectAction(filteredActions[selectedIndex]);
+    }
+  };
+
+  return (
+    <div className="gm-quick-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <section className="gm-quick-modal" role="dialog" aria-modal="true" aria-labelledby="gm-quick-title">
+        <header className="gm-quick-searchbar">
+          <Icon name="search" size={20} />
+          <input
+            ref={inputRef}
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Page, action ou réglage..."
+            aria-label="Rechercher dans GameMate"
+            aria-controls="gm-quick-results"
+            aria-activedescendant={filteredActions[selectedIndex] ? `gm-quick-${filteredActions[selectedIndex].id}` : undefined}
+          />
+          <kbd>Échap</kbd>
+        </header>
+
+        <div className="gm-quick-heading">
+          <div><span>ACCÈS RAPIDE</span><h2 id="gm-quick-title">Où veux-tu aller ?</h2></div>
+          <small>{filteredActions.length} résultat{filteredActions.length > 1 ? "s" : ""}</small>
+        </div>
+
+        <div id="gm-quick-results" className="gm-quick-results" role="listbox">
+          {filteredActions.length ? filteredActions.map((action, index) => (
+            <button
+              id={`gm-quick-${action.id}`}
+              key={action.id}
+              type="button"
+              role="option"
+              aria-selected={index === selectedIndex}
+              className={`${index === selectedIndex ? "selected" : ""} ${action.section === currentSection ? "current" : ""} ${action.accent ? `accent-${action.accent}` : ""}`}
+              onMouseEnter={() => setSelectedIndex(index)}
+              onClick={() => selectAction(action)}
+            >
+              <span className="gm-quick-icon"><Icon name={action.icon} /></span>
+              <span className="gm-quick-copy"><strong>{action.label}</strong><small>{action.description}</small></span>
+              {action.badge ? <b className="gm-quick-badge">{action.badge > 99 ? "99+" : action.badge}</b> : action.section === currentSection ? <em>OUVERT</em> : null}
+              <Icon name="arrow-right" size={16} />
+            </button>
+          )) : (
+            <div className="gm-quick-empty"><Icon name="search" size={28} /><strong>Aucun résultat</strong><p>Essaie « audio », « amis », « vocal » ou « profil ».</p></div>
+          )}
+        </div>
+
+        <footer className="gm-quick-footer">
+          <span><kbd>↑</kbd><kbd>↓</kbd> Naviguer</span>
+          <span><kbd>Entrée</kbd> Ouvrir</span>
+          <span><kbd>Ctrl K</kbd> Afficher / masquer</span>
+        </footer>
+      </section>
+    </div>
+  );
+}
+
+function normalizeSearch(value: string) {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 }
 
 
@@ -1245,14 +1522,14 @@ function NavItem({
   onClick,
 }: {
   active: boolean;
-  icon: string;
+  icon: IconName;
   label: string;
   badge?: number;
   onClick: () => void;
 }) {
   return (
     <button type="button" className={`gm-nav-item ${active ? "active" : ""}`} onClick={onClick}>
-      <span className="gm-nav-icon">{icon}</span>
+      <span className="gm-nav-icon"><Icon name={icon} size={18} /></span>
       <span className="gm-nav-text">{label}</span>
       {badge > 0 && <b className="gm-nav-badge">{badge > 99 ? "99+" : badge}</b>}
     </button>
@@ -1267,11 +1544,16 @@ function CleanHome({
   gamingDna,
   lookingFor,
   profileCompletion,
+  pendingFriendRequests,
+  unreadMessages,
+  voiceSession,
   onLogin,
   onPlay,
   onFindMates,
   onSquads,
+  onFriends,
   onMessages,
+  onOpenMessage,
   onProfile,
 }: {
   session: Session | null;
@@ -1281,15 +1563,41 @@ function CleanHome({
   gamingDna: GamingDnaTag[];
   lookingFor: LookingForOption[];
   profileCompletion: number;
+  pendingFriendRequests: number;
+  unreadMessages: number;
+  voiceSession: VoiceSessionSnapshot | null;
   onLogin: () => void;
   onPlay: () => void;
   onFindMates: () => void;
   onSquads: () => void;
+  onFriends: () => void;
   onMessages: () => void;
+  onOpenMessage: (userId: string) => void;
   onProfile: () => void;
 }) {
   const firstName = displayName.split(" ")[0] || displayName;
   const primaryGame = userGames.find((game) => game.is_primary) ?? userGames[0] ?? null;
+
+  if (session) {
+    return (
+      <HomeDashboard
+        session={session}
+        displayName={displayName}
+        userGames={userGames}
+        profileCompletion={profileCompletion}
+        pendingFriendRequests={pendingFriendRequests}
+        unreadMessages={unreadMessages}
+        voiceSession={voiceSession}
+        onPlay={onPlay}
+        onFindMates={onFindMates}
+        onSquads={onSquads}
+        onFriends={onFriends}
+        onMessages={onMessages}
+        onOpenMessage={onOpenMessage}
+        onProfile={onProfile}
+      />
+    );
+  }
 
   return (
     <div className="gm-home gm-home-minimal">
@@ -1307,7 +1615,7 @@ function CleanHome({
           <div className="gm-hero-actions">
             {session ? (
               <>
-                <button className="gm-btn primary" type="button" onClick={onPlay}>▶ Jouer maintenant</button>
+                <button className="gm-btn primary" type="button" onClick={onPlay}><Icon name="play" size={16} /> Jouer maintenant</button>
                 <button className="gm-btn" type="button" onClick={onFindMates}>Trouver des mates</button>
               </>
             ) : (
@@ -1327,22 +1635,22 @@ function CleanHome({
               <strong>{primaryGame?.gameName ?? "Configure ton jeu principal"}</strong>
               <span>{primaryGame?.platformName ?? "Ton Companion est prêt"}</span>
             </div>
-            <button type="button" onClick={onPlay}>Lancer Play Now <b>→</b></button>
+            <button type="button" onClick={onPlay}>Lancer Play Now <Icon name="arrow-right" size={15} /></button>
           </div>
         )}
       </section>
 
       <section className="gm-minimal-actions">
         <button type="button" onClick={onPlay}>
-          <span>▶</span>
+          <span><Icon name="play" /></span>
           <div><strong>Jouer</strong><small>Play Now</small></div>
         </button>
         <button type="button" onClick={onFindMates}>
-          <span>⌕</span>
+          <span><Icon name="search" /></span>
           <div><strong>Recherche</strong><small>Trouver des mates</small></div>
         </button>
         <button type="button" onClick={onSquads}>
-          <span>◇</span>
+          <span><Icon name="users" /></span>
           <div><strong>Squads</strong><small>Groupe et invitations</small></div>
         </button>
       </section>
@@ -1401,7 +1709,7 @@ function CleanHome({
                 <strong>{profileCompletion >= 80 ? "Prêt pour le matching" : "Continue la configuration"}</strong>
                 <em>{profileCompletion === 100 ? "Toutes les informations sont renseignées." : "Plus ton profil est précis, plus les résultats sont utiles."}</em>
               </span>
-              <b>›</b>
+              <Icon name="chevron-right" size={18} />
             </button>
           )}
 
@@ -1464,7 +1772,7 @@ function CleanLoginModal({
   return (
     <div className="gm-modal-backdrop" onMouseDown={onClose}>
       <form className="gm-login-modal" onMouseDown={(event) => event.stopPropagation()} onSubmit={onSubmit}>
-        <button type="button" className="gm-modal-close" onClick={onClose}>×</button>
+        <button type="button" className="gm-modal-close" onClick={onClose} aria-label="Fermer"><Icon name="close" size={18} /></button>
         <img src="/gamemate-logo.png" alt="" />
         <span className="gm-eyebrow">GAMEMATE</span>
         <h2>Connexion</h2>
@@ -1497,3 +1805,60 @@ function prettyValue(value: string) {
 }
 
 export default App;
+
+function VoiceSessionDock({
+  session,
+  onOpen,
+}: {
+  session: VoiceSessionSnapshot;
+  onOpen: () => void;
+}) {
+  const sendCommand = (action: "toggle-mute" | "toggle-deafen" | "leave") => {
+    window.dispatchEvent(new CustomEvent("gamemate:voice-command", {
+      detail: { action, channelId: session.channelId },
+    }));
+  };
+
+  return (
+    <aside className={`gm-voice-dock ${session.speaking ? "is-speaking" : ""}`} aria-label="Salon vocal actif">
+      <button type="button" className="gm-voice-dock-main" onClick={onOpen}>
+        <span className="gm-voice-dock-signal"><i /><i /><i /></span>
+        <span className="gm-voice-dock-copy">
+          <small>{session.connecting ? "CONNEXION AU VOCAL" : "VOCAL CONNECTÉ"}</small>
+          <strong>{session.channelName}</strong>
+          <em>{session.participantCount || 1} connecté{session.participantCount > 1 ? "s" : ""} · Cliquer pour revenir</em>
+        </span>
+      </button>
+
+      <div className="gm-voice-dock-actions">
+        <button
+          type="button"
+          className={session.muted ? "is-active" : ""}
+          onClick={() => sendCommand("toggle-mute")}
+          aria-label={session.muted ? "Réactiver le microphone" : "Couper le microphone"}
+          title={session.muted ? "Réactiver le microphone" : "Couper le microphone"}
+        >
+          <Icon name={session.muted ? "mic-off" : "mic"} />
+        </button>
+        <button
+          type="button"
+          className={session.deafened ? "is-active" : ""}
+          onClick={() => sendCommand("toggle-deafen")}
+          aria-label={session.deafened ? "Réactiver le son" : "Couper le son"}
+          title={session.deafened ? "Réactiver le son" : "Mode sourd"}
+        >
+          <Icon name={session.deafened ? "volume-x" : "headphones"} />
+        </button>
+        <button
+          type="button"
+          className="leave"
+          onClick={() => sendCommand("leave")}
+          aria-label="Quitter le salon vocal"
+          title="Quitter le vocal"
+        >
+          <Icon name="log-out" />
+        </button>
+      </div>
+    </aside>
+  );
+}

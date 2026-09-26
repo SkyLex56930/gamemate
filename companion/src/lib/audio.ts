@@ -57,7 +57,8 @@ async function play(path: string, volume: number) {
   }
 }
 
-export function playNotificationSound() {
+export function playNotificationSound(force = false) {
+  if (!force && localStorage.getItem("gamemate-presence-status") === "dnd") return;
   if (!canPlay("receive")) return;
   void play("/sounds/notification-bell.wav", effectiveVolume("receive"));
 }

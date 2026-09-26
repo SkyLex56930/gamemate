@@ -3,7 +3,10 @@ import type { Session } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase";
 import { playMessageSendSound } from "../lib/audio";
 import SquadGameSession from "../components/SquadGameSession";
-import SquadVoiceRoom from "../components/SquadVoiceRoom";
+import SquadSchedule from "../components/SquadSchedule";
+import SquadVoiceRoom, { type VoiceSessionSnapshot } from "../components/SquadVoiceRoom";
+import { Icon } from "../components/Icon";
+import { presenceActivity, presenceLabel, type PresenceSnapshot, type PresenceStatus } from "../lib/presence";
 import "./SquadsPage.css";
 
 type Props = {
@@ -12,6 +15,7 @@ type Props = {
   onOpenFriends: () => void;
   onOpenMessages: (userId: string) => void;
   onOpenProfile: (userId: string) => void;
+  onVoiceStateChange?: (snapshot: VoiceSessionSnapshot | null) => void;
 };
 
 type Game = {
@@ -26,6 +30,7 @@ type Member = {
   avatar_url: string | null;
   role: "owner" | "member";
   joined_at: string;
+  presence: PresenceSnapshot;
 };
 
 type SquadChannel = {
@@ -97,6 +102,7 @@ type FriendProfile = {
   display_name: string | null;
   avatar_url: string | null;
   region: string | null;
+  presence: PresenceSnapshot;
 };
 
 type Friendship = {
@@ -105,15 +111,15 @@ type Friendship = {
   status: string;
 };
 
-type Tab = "overview" | "session" | "members" | "chat" | "invite" | "settings";
+type Tab = "overview" | "planning" | "session" | "members" | "chat" | "invite" | "settings";
 
 const SQUAD_TAB_REQUEST_KEY = "gamemate-open-squad-tab";
 
 function readInitialSquadTab(): Tab {
   const requested = sessionStorage.getItem(SQUAD_TAB_REQUEST_KEY);
-  if (requested === "session") {
+  if (requested === "session" || requested === "planning") {
     sessionStorage.removeItem(SQUAD_TAB_REQUEST_KEY);
-    return "session";
+    return requested;
   }
   return "overview";
 }
@@ -130,6 +136,7 @@ export default function SquadsPage({
   onOpenFriends,
   onOpenMessages,
   onOpenProfile,
+  onVoiceStateChange,
 }: Props) {
   const [state, setState] = useState<SquadState>(EMPTY_STATE);
   const [games, setGames] = useState<Game[]>([]);
@@ -170,7 +177,7 @@ export default function SquadsPage({
   const squad = state.active_squad;
   const isOwner = Boolean(squad && squad.owner_id === userId);
 
-  const loadState = useCallback(async () => {
+  const loadState = useCallback(async (background = false) => {
     if (!userId) {
       setState(EMPTY_STATE);
       setFriends([]);
@@ -178,7 +185,7 @@ export default function SquadsPage({
       return;
     }
 
-    setLoading(true);
+    if (!background) setLoading(true);
     setError("");
 
     const [stateResult, gamesResult, friendshipsResult] = await Promise.all([
@@ -200,21 +207,42 @@ export default function SquadsPage({
 
     const nextState = (stateResult.data ?? EMPTY_STATE) as SquadState;
 
-    setState({
-      active_squad: nextState.active_squad ?? null,
-      incoming_invites: nextState.incoming_invites ?? [],
-      outgoing_invites: nextState.outgoing_invites ?? [],
-    });
-
     if (!gamesResult.error) {
       setGames((gamesResult.data ?? []) as Game[]);
     }
 
-    if (!friendshipsResult.error) {
-      const rows = (friendshipsResult.data ?? []) as Friendship[];
-      const ids = rows.map((row) =>
+    const friendIds = friendshipsResult.error
+      ? []
+      : ((friendshipsResult.data ?? []) as Friendship[]).map((row) =>
         row.requester_id === userId ? row.addressee_id : row.requester_id
       );
+    const memberIds = nextState.active_squad?.members.map((member) => member.user_id) ?? [];
+    const presenceIds = Array.from(new Set([...friendIds, ...memberIds]));
+    const presenceResult = presenceIds.length > 0
+      ? await supabase.rpc("get_presence_v15", { p_user_ids: presenceIds })
+      : { data: [], error: null };
+    const presenceMap = new Map<string, PresenceSnapshot>(
+      ((presenceResult.data ?? []) as PresenceSnapshot[]).map((presence) => [presence.user_id, presence])
+    );
+
+    const hydratedSquad = nextState.active_squad
+      ? {
+          ...nextState.active_squad,
+          members: nextState.active_squad.members.map((member) => ({
+            ...member,
+            presence: presenceMap.get(member.user_id) ?? offlinePresence(member.user_id),
+          })),
+        }
+      : null;
+
+    setState({
+      active_squad: hydratedSquad,
+      incoming_invites: nextState.incoming_invites ?? [],
+      outgoing_invites: nextState.outgoing_invites ?? [],
+    });
+
+    if (!friendshipsResult.error) {
+      const ids = friendIds;
 
       if (ids.length > 0) {
         const { data: profiles } = await supabase
@@ -222,7 +250,10 @@ export default function SquadsPage({
           .select("id, username, display_name, avatar_url, region")
           .in("id", ids);
 
-        setFriends((profiles ?? []) as FriendProfile[]);
+        setFriends((profiles ?? []).map((profile) => ({
+          ...profile,
+          presence: presenceMap.get(profile.id) ?? offlinePresence(profile.id),
+        })) as FriendProfile[]);
       } else {
         setFriends([]);
       }
@@ -253,10 +284,16 @@ export default function SquadsPage({
 
   useEffect(() => {
     function openRequestedTab(event: Event) {
-      const requested = (event as CustomEvent<string>).detail;
-      if (requested === "session") {
+      const requested = (event as CustomEvent<string | { tab: string; channelId?: string }>).detail;
+      const requestedTab = typeof requested === "string" ? requested : requested?.tab;
+      if (requestedTab === "session" || requestedTab === "planning") {
         sessionStorage.removeItem(SQUAD_TAB_REQUEST_KEY);
-        setTab("session");
+        setTab(requestedTab);
+      } else if (requestedTab === "chat") {
+        setTab("chat");
+        if (typeof requested !== "string" && requested.channelId) {
+          setSelectedChannelId(requested.channelId);
+        }
       }
     }
 
@@ -272,6 +309,7 @@ export default function SquadsPage({
       .on("postgres_changes", { event: "*", schema: "public", table: "squads" }, () => void loadState())
       .on("postgres_changes", { event: "*", schema: "public", table: "squad_members" }, () => void loadState())
       .on("postgres_changes", { event: "*", schema: "public", table: "squad_invites" }, () => void loadState())
+      .on("postgres_changes", { event: "*", schema: "public", table: "user_presence" }, () => void loadState(true))
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "squad_messages" }, () => void loadState())
       .subscribe();
 
@@ -306,7 +344,8 @@ export default function SquadsPage({
           .join(" ")
           .toLowerCase()
           .includes(q);
-      });
+      })
+      .sort((a, b) => presenceRank(a.presence.status) - presenceRank(b.presence.status));
   }, [friends, squad, state.outgoing_invites, friendQuery]);
 
   async function createSquad() {
@@ -377,6 +416,8 @@ export default function SquadsPage({
           ? "Ta team est complète."
           : inviteError.message.includes("only_owner_can_invite")
           ? "Seul le chef peut inviter."
+          : inviteError.message.includes("squad_invites_disabled")
+          ? "Cet ami n’accepte pas les invitations de squad."
           : "Impossible d’envoyer l’invitation."
       );
     } else {
@@ -730,6 +771,7 @@ export default function SquadsPage({
 
           <nav className="team-tabs">
             <Tab active={tab === "overview"} label="Aperçu" onClick={() => setTab("overview")} />
+            <Tab active={tab === "planning"} label="Planning" onClick={() => setTab("planning")} />
             <Tab active={tab === "session"} label="Session de jeu" onClick={() => setTab("session")} />
             <Tab active={tab === "members"} label="Membres" count={squad.members.length} onClick={() => setTab("members")} />
             <Tab active={tab === "chat"} label="Chat" onClick={() => setTab("chat")} />
@@ -753,6 +795,17 @@ export default function SquadsPage({
                 onChat={() => setTab("chat")}
                 onInvite={() => setTab("invite")}
                 onSettings={() => setTab("settings")}
+              />
+            )}
+
+            {tab === "planning" && (
+              <SquadSchedule
+                squadId={squad.squad_id}
+                isOwner={isOwner}
+                games={games}
+                defaultGameId={squad.game_id}
+                squadMaxMembers={squad.max_members}
+                onOpenLiveSession={() => setTab("session")}
               />
             )}
 
@@ -782,7 +835,7 @@ export default function SquadsPage({
               />
             )}
 
-            {tab === "chat" && (
+            <div className={`team-persistent-chat ${tab === "chat" ? "" : "is-hidden"}`} aria-hidden={tab !== "chat"}>
               <TeamChat
                 squadId={squad.squad_id}
                 members={squad.members}
@@ -815,8 +868,9 @@ export default function SquadsPage({
                   setEditingChannelName("");
                 }}
                 onDeleteChannel={(channel) => void deleteChannel(channel)}
+                onVoiceStateChange={onVoiceStateChange}
               />
-            )}
+            </div>
 
             {tab === "invite" && isOwner && (
               <InviteFriends
@@ -1021,8 +1075,10 @@ function Members({
               {memberName(member)}
               {member.user_id === currentUserId && <em>Toi</em>}
             </strong>
-            <small>{member.username ? `@${member.username}` : "GameMate"}</small>
+            <small>{member.username ? `@${member.username}` : "GameMate"} · {presenceActivity(member.presence)}</small>
           </div>
+
+          <span className={`team-presence ${member.presence.status}`}><i />{presenceLabel(member.presence.status)}</span>
 
           <span className={`team-role ${member.role}`}>
             {member.role === "owner" ? "CHEF" : "MEMBRE"}
@@ -1096,7 +1152,7 @@ function InviteFriends({
                 <Avatar url={friend.avatar_url} name={profileName(friend)} />
                 <div>
                   <strong>{profileName(friend)}</strong>
-                  <small>{friend.username ? `@${friend.username}` : friend.region || "GameMate"}</small>
+                  <small><i className={`team-presence-dot ${friend.presence.status}`} />{presenceActivity(friend.presence)}</small>
                 </div>
                 <button
                   type="button"
@@ -1175,6 +1231,7 @@ function TeamChat({
   onRenameChannel,
   onCancelRename,
   onDeleteChannel,
+  onVoiceStateChange,
 }: {
   squadId: string;
   members: Member[];
@@ -1201,7 +1258,9 @@ function TeamChat({
   onRenameChannel: (channelId: string) => void;
   onCancelRename: () => void;
   onDeleteChannel: (channel: SquadChannel) => void;
+  onVoiceStateChange?: (snapshot: VoiceSessionSnapshot | null) => void;
 }) {
+  const [retainedVoiceChannelId, setRetainedVoiceChannelId] = useState<string | null>(null);
   const selectedChannel =
     channels.find((channel) => channel.id === selectedChannelId) ??
     channels[0] ??
@@ -1209,6 +1268,21 @@ function TeamChat({
 
   const textChannels = channels.filter((channel) => channel.channel_type === "text");
   const voiceChannels = channels.filter((channel) => channel.channel_type === "voice");
+  const retainedVoiceChannel = retainedVoiceChannelId
+    ? voiceChannels.find((channel) => channel.id === retainedVoiceChannelId) ?? null
+    : null;
+  const selectedVoiceChannel = selectedChannel?.channel_type === "voice" ? selectedChannel : null;
+  const voiceChannelToRender = retainedVoiceChannel ?? selectedVoiceChannel;
+  const showVoicePanel = Boolean(selectedVoiceChannel);
+
+  const handleVoiceStateChange = useCallback((snapshot: VoiceSessionSnapshot | null) => {
+    setRetainedVoiceChannelId((current) => {
+      if (snapshot?.joined || snapshot?.connecting) return snapshot.channelId;
+      if (!snapshot || snapshot.channelId === current) return null;
+      return current;
+    });
+    onVoiceStateChange?.(snapshot);
+  }, [onVoiceStateChange]);
 
   return (
     <div className="team-chat-shell">
@@ -1258,8 +1332,8 @@ function TeamChat({
               value={newChannelType}
               onChange={(event) => onNewChannelType(event.target.value as "text" | "voice")}
             >
-              <option value="text"># Texte</option>
-              <option value="voice">🔊 Vocal</option>
+              <option value="text">Texte</option>
+              <option value="voice">Vocal</option>
             </select>
             <input
               value={newChannelName}
@@ -1287,15 +1361,20 @@ function TeamChat({
         )}
       </aside>
 
-      {selectedChannel?.channel_type === "voice" ? (
-        <SquadVoiceRoom
-          squadId={squadId}
-          channelId={selectedChannel.id}
-          channelName={selectedChannel.name}
-          currentUserId={currentUserId}
-          members={members}
-        />
-      ) : (
+      {voiceChannelToRender && (
+        <div className={`team-persistent-voice ${showVoicePanel ? "" : "is-hidden"}`} aria-hidden={!showVoicePanel}>
+          <SquadVoiceRoom
+            squadId={squadId}
+            channelId={voiceChannelToRender.id}
+            channelName={voiceChannelToRender.name}
+            currentUserId={currentUserId}
+            members={members}
+            onStateChange={handleVoiceStateChange}
+          />
+        </div>
+      )}
+
+      {!showVoicePanel && (
         <div className="team-chat">
           <header className="team-chat-head">
             <div>
@@ -1423,8 +1502,8 @@ function ChannelGroup({
                     if (event.key === "Escape") onCancelRename();
                   }}
                 />
-                <button type="button" onClick={() => onRenameChannel(channel.id)}>✓</button>
-                <button type="button" onClick={onCancelRename}>×</button>
+                <button type="button" onClick={() => onRenameChannel(channel.id)} aria-label="Enregistrer"><Icon name="check" size={15} /></button>
+                <button type="button" onClick={onCancelRename} aria-label="Annuler"><Icon name="close" size={15} /></button>
               </div>
             ) : (
               <>
@@ -1433,7 +1512,7 @@ function ChannelGroup({
                   className="team-channel-main"
                   onClick={() => onSelectChannel(channel.id)}
                 >
-                  <span>{channel.channel_type === "voice" ? "🔊" : "#"}</span>
+                  <span>{channel.channel_type === "voice" ? <Icon name="volume-2" size={16} /> : <Icon name="message-circle" size={16} />}</span>
                   <strong>{channel.name}</strong>
                 </button>
 
@@ -1444,7 +1523,7 @@ function ChannelGroup({
                       title="Renommer"
                       onClick={() => onStartRename(channel)}
                     >
-                      ✎
+                      <Icon name="edit" size={15} />
                     </button>
                     {!channel.is_default && (
                       <button
@@ -1453,7 +1532,7 @@ function ChannelGroup({
                         disabled={working === `channel-delete-${channel.id}`}
                         onClick={() => onDeleteChannel(channel)}
                       >
-                        ×
+                        <Icon name="trash" size={15} />
                       </button>
                     )}
                   </div>
@@ -1683,6 +1762,22 @@ function ConfirmModal({
 
 function memberName(member: Member) {
   return member.display_name || member.username || "Joueur GameMate";
+}
+
+function offlinePresence(userId: string): PresenceSnapshot {
+  return {
+    user_id: userId,
+    status: "offline",
+    custom_status: null,
+    activity_game_id: null,
+    activity_game_name: null,
+    activity_text: null,
+    last_seen_at: null,
+  };
+}
+
+function presenceRank(status: PresenceStatus) {
+  return status === "online" ? 0 : status === "away" ? 1 : status === "dnd" ? 2 : 3;
 }
 
 function profileName(profile: FriendProfile) {

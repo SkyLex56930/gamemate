@@ -796,6 +796,11 @@
   box-shadow:none;
 }
 
+.messages-presence-dot.away{background:#f2b94e;box-shadow:0 0 7px rgba(242,185,78,.34)}
+.messages-presence-dot.dnd{background:#ff526c;box-shadow:0 0 7px rgba(255,82,108,.34)}
+.messages-presence-dot.invisible{background:#536579;box-shadow:none}
+.messages-thread-person>small{display:flex;align-items:center;gap:5px;margin-top:2px;color:#6f829a;font-size:7px}.messages-thread-person>small .messages-presence-dot{border:0}
+
 .messages-friends{
   min-height:0;
   flex:1;

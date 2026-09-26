@@ -1,0 +1,627 @@
+--- a/companion/src/App.tsx
++++ b/companion/src/App.tsx
+@@ -16,6 +16,7 @@
+ import SupportPage from "./pages/SupportPage";
+ import NotificationCenter from "./components/NotificationCenter";
+ import type { VoiceSessionSnapshot } from "./components/SquadVoiceRoom";
++import HomeDashboard from "./components/HomeDashboard";
+ 
+ import "./App.css";
+ import "./CompanionV8.css";
+@@ -1050,11 +1051,19 @@
+                     gamingDna={gamingDna}
+                     lookingFor={lookingFor}
+                     profileCompletion={profileCompletion.percent}
++                    pendingFriendRequests={pendingFriendRequests}
++                    unreadMessages={unreadMessages}
++                    voiceSession={voiceSession}
+                     onLogin={() => setShowLogin(true)}
+                     onPlay={() => navigateTo("play")}
+                     onFindMates={() => navigateTo("mates")}
+                     onSquads={() => navigateTo("squads")}
++                    onFriends={() => navigateTo("friends")}
+                     onMessages={() => navigateTo("messages")}
++                    onOpenMessage={(userId) => {
++                      setMessageTargetUserId(userId);
++                      navigateTo("messages");
++                    }}
+                     onProfile={() => navigateTo("profile")}
+                   />
+                 )}
+@@ -1291,11 +1300,16 @@
+   gamingDna,
+   lookingFor,
+   profileCompletion,
++  pendingFriendRequests,
++  unreadMessages,
++  voiceSession,
+   onLogin,
+   onPlay,
+   onFindMates,
+   onSquads,
++  onFriends,
+   onMessages,
++  onOpenMessage,
+   onProfile,
+ }: {
+   session: Session | null;
+@@ -1305,16 +1319,42 @@
+   gamingDna: GamingDnaTag[];
+   lookingFor: LookingForOption[];
+   profileCompletion: number;
++  pendingFriendRequests: number;
++  unreadMessages: number;
++  voiceSession: VoiceSessionSnapshot | null;
+   onLogin: () => void;
+   onPlay: () => void;
+   onFindMates: () => void;
+   onSquads: () => void;
++  onFriends: () => void;
+   onMessages: () => void;
++  onOpenMessage: (userId: string) => void;
+   onProfile: () => void;
+ }) {
+   const firstName = displayName.split(" ")[0] || displayName;
+   const primaryGame = userGames.find((game) => game.is_primary) ?? userGames[0] ?? null;
+ 
++  if (session) {
++    return (
++      <HomeDashboard
++        session={session}
++        displayName={displayName}
++        userGames={userGames}
++        profileCompletion={profileCompletion}
++        pendingFriendRequests={pendingFriendRequests}
++        unreadMessages={unreadMessages}
++        voiceSession={voiceSession}
++        onPlay={onPlay}
++        onFindMates={onFindMates}
++        onSquads={onSquads}
++        onFriends={onFriends}
++        onMessages={onMessages}
++        onOpenMessage={onOpenMessage}
++        onProfile={onProfile}
++      />
++    );
++  }
++
+   return (
+     <div className="gm-home gm-home-minimal">
+       <section className="gm-hero gm-hero-minimal">
+--- /dev/null
++++ b/companion/src/components/HomeDashboard.tsx
+@@ -0,0 +1,512 @@
++import { useCallback, useEffect, useMemo, useRef, useState } from "react";
++import type { Session } from "@supabase/supabase-js";
++import { supabase } from "../lib/supabase";
++import type { VoiceSessionSnapshot } from "./SquadVoiceRoom";
++import "./HomeDashboard.css";
++
++type DashboardGame = {
++  game_id: string;
++  platform_id: string | null;
++  is_primary: boolean;
++  gameName: string;
++  platformName: string | null;
++};
++
++type FriendProfile = {
++  id: string;
++  username: string | null;
++  display_name: string | null;
++  avatar_url: string | null;
++};
++
++type FriendshipRow = {
++  requester_id: string;
++  addressee_id: string;
++};
++
++type PresenceRow = {
++  user_id: string;
++  status: "online" | "busy" | "offline";
++  last_seen_at: string | null;
++};
++
++type OnlineFriend = FriendProfile & {
++  status: "online" | "busy";
++};
++
++type ConversationRow = {
++  id: string;
++  user_a: string;
++  user_b: string;
++  updated_at: string;
++};
++
++type MessageRow = {
++  id: string;
++  conversation_id: string;
++  sender_id: string;
++  body: string;
++  created_at: string;
++  read_at: string | null;
++};
++
++type ConversationPreview = {
++  conversationId: string;
++  profile: FriendProfile;
++  message: MessageRow | null;
++  unread: number;
++  updatedAt: string;
++};
++
++type SquadMember = {
++  user_id: string;
++  display_name: string | null;
++  username: string | null;
++  avatar_url: string | null;
++};
++
++type ActiveSquad = {
++  squad_id: string;
++  name: string;
++  game_name: string | null;
++  max_members: number;
++  members: SquadMember[];
++};
++
++type LfgPost = {
++  post_id: string;
++  owner_id: string;
++  owner_display_name: string | null;
++  owner_username: string | null;
++  owner_avatar_url: string | null;
++  game_name: string;
++  platform_name: string | null;
++  title: string;
++  mode_text: string | null;
++  rank_text: string | null;
++  starts_at: string;
++  max_players: number;
++  current_players: number;
++  is_owner: boolean;
++};
++
++type DashboardData = {
++  onlineFriends: OnlineFriend[];
++  conversations: ConversationPreview[];
++  squad: ActiveSquad | null;
++  recommendations: LfgPost[];
++};
++
++type Props = {
++  session: Session;
++  displayName: string;
++  userGames: DashboardGame[];
++  profileCompletion: number;
++  pendingFriendRequests: number;
++  unreadMessages: number;
++  voiceSession: VoiceSessionSnapshot | null;
++  onPlay: () => void;
++  onFindMates: () => void;
++  onSquads: () => void;
++  onFriends: () => void;
++  onMessages: () => void;
++  onOpenMessage: (userId: string) => void;
++  onProfile: () => void;
++};
++
++const EMPTY_DATA: DashboardData = {
++  onlineFriends: [],
++  conversations: [],
++  squad: null,
++  recommendations: [],
++};
++
++export default function HomeDashboard({
++  session,
++  displayName,
++  userGames,
++  profileCompletion,
++  pendingFriendRequests,
++  unreadMessages,
++  voiceSession,
++  onPlay,
++  onFindMates,
++  onSquads,
++  onFriends,
++  onMessages,
++  onOpenMessage,
++  onProfile,
++}: Props) {
++  const [data, setData] = useState<DashboardData>(EMPTY_DATA);
++  const [loading, setLoading] = useState(true);
++  const [refreshing, setRefreshing] = useState(false);
++  const [error, setError] = useState("");
++  const requestIdRef = useRef(0);
++  const userId = session.user.id;
++  const firstName = displayName.split(" ")[0] || displayName;
++  const primaryGame = useMemo(
++    () => userGames.find((game) => game.is_primary) ?? userGames[0] ?? null,
++    [userGames]
++  );
++
++  const loadDashboard = useCallback(async (background = false) => {
++    const requestId = ++requestIdRef.current;
++    if (background) setRefreshing(true);
++    else setLoading(true);
++    setError("");
++
++    const [friendshipsResult, conversationsResult, squadResult, lfgResult] = await Promise.all([
++      supabase
++        .from("friendships")
++        .select("requester_id, addressee_id")
++        .eq("status", "accepted")
++        .or(`requester_id.eq.${userId},addressee_id.eq.${userId}`),
++      supabase
++        .from("conversations")
++        .select("id, user_a, user_b, updated_at")
++        .or(`user_a.eq.${userId},user_b.eq.${userId}`)
++        .order("updated_at", { ascending: false })
++        .limit(8),
++      supabase.rpc("get_my_squad_state"),
++      supabase.rpc("get_lfg_feed_v8", {
++        p_game_id: primaryGame ? Number(primaryGame.game_id) : null,
++        p_scope: "all",
++        p_limit: 8,
++      }),
++    ]);
++
++    if (requestId !== requestIdRef.current) return;
++
++    const errors = [
++      friendshipsResult.error,
++      conversationsResult.error,
++      squadResult.error,
++      lfgResult.error,
++    ].filter(Boolean);
++
++    const friendships = (friendshipsResult.data ?? []) as FriendshipRow[];
++    const conversations = (conversationsResult.data ?? []) as ConversationRow[];
++    const friendIds = Array.from(new Set(friendships.map((row) => (
++      row.requester_id === userId ? row.addressee_id : row.requester_id
++    ))));
++    const conversationUserIds = conversations.map((conversation) => (
++      conversation.user_a === userId ? conversation.user_b : conversation.user_a
++    ));
++    const profileIds = Array.from(new Set([...friendIds, ...conversationUserIds]));
++    const conversationIds = conversations.map((conversation) => conversation.id);
++
++    let profiles: FriendProfile[] = [];
++    let presenceRows: PresenceRow[] = [];
++    let messages: MessageRow[] = [];
++
++    const [profilesResult, presenceResult, messagesResult] = await Promise.all([
++      profileIds.length > 0
++        ? supabase.from("profiles").select("id, username, display_name, avatar_url").in("id", profileIds)
++        : Promise.resolve({ data: [], error: null }),
++      friendIds.length > 0
++        ? supabase.from("user_presence").select("user_id, status, last_seen_at").in("user_id", friendIds)
++        : Promise.resolve({ data: [], error: null }),
++      conversationIds.length > 0
++        ? supabase
++          .from("messages")
++          .select("id, conversation_id, sender_id, body, created_at, read_at")
++          .in("conversation_id", conversationIds)
++          .order("created_at", { ascending: false })
++          .limit(160)
++        : Promise.resolve({ data: [], error: null }),
++    ]);
++
++    if (requestId !== requestIdRef.current) return;
++
++    if (profilesResult.error || presenceResult.error || messagesResult.error) {
++      errors.push(profilesResult.error, presenceResult.error, messagesResult.error);
++    }
++
++    profiles = (profilesResult.data ?? []) as FriendProfile[];
++    presenceRows = (presenceResult.data ?? []) as PresenceRow[];
++    messages = (messagesResult.data ?? []) as MessageRow[];
++
++    const profileMap = new Map(profiles.map((profile) => [profile.id, profile]));
++    const presenceMap = new Map(presenceRows.map((presence) => [presence.user_id, presence]));
++    const now = Date.now();
++    const onlineFriends = friendIds
++      .map((friendId) => {
++        const profile = profileMap.get(friendId);
++        const presence = presenceMap.get(friendId);
++        const fresh = presence?.last_seen_at
++          ? now - new Date(presence.last_seen_at).getTime() <= 90_000
++          : false;
++        if (!profile || !presence || !fresh || (presence.status !== "online" && presence.status !== "busy")) return null;
++        return { ...profile, status: presence.status } as OnlineFriend;
++      })
++      .filter((friend): friend is OnlineFriend => Boolean(friend))
++      .sort((a, b) => Number(a.status === "busy") - Number(b.status === "busy"));
++
++    const latestMap = new Map<string, MessageRow>();
++    const unreadMap = new Map<string, number>();
++    for (const message of messages) {
++      if (!latestMap.has(message.conversation_id)) latestMap.set(message.conversation_id, message);
++      if (message.sender_id !== userId && !message.read_at) {
++        unreadMap.set(message.conversation_id, (unreadMap.get(message.conversation_id) ?? 0) + 1);
++      }
++    }
++
++    const conversationPreviews = conversations
++      .map((conversation) => {
++        const otherId = conversation.user_a === userId ? conversation.user_b : conversation.user_a;
++        const profile = profileMap.get(otherId);
++        if (!profile) return null;
++        return {
++          conversationId: conversation.id,
++          profile,
++          message: latestMap.get(conversation.id) ?? null,
++          unread: unreadMap.get(conversation.id) ?? 0,
++          updatedAt: latestMap.get(conversation.id)?.created_at ?? conversation.updated_at,
++        };
++      })
++      .filter((preview): preview is ConversationPreview => Boolean(preview))
++      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
++
++    const squadPayload = squadResult.data as { active_squad?: ActiveSquad | null } | null;
++    const lfgPosts = (lfgResult.data ?? []) as LfgPost[];
++    const externalPosts = lfgPosts.filter((post) => !post.is_owner);
++
++    setData({
++      onlineFriends,
++      conversations: conversationPreviews,
++      squad: squadPayload?.active_squad ?? null,
++      recommendations: (externalPosts.length > 0 ? externalPosts : lfgPosts).slice(0, 4),
++    });
++    setError(errors.length > 0 ? "Certaines informations n’ont pas pu être actualisées." : "");
++    setLoading(false);
++    setRefreshing(false);
++  }, [primaryGame, userId]);
++
++  useEffect(() => {
++    void loadDashboard();
++    return () => {
++      requestIdRef.current += 1;
++    };
++  }, [loadDashboard]);
++
++  useEffect(() => {
++    let timer: ReturnType<typeof setTimeout> | null = null;
++    const refreshSoon = () => {
++      if (timer) clearTimeout(timer);
++      timer = setTimeout(() => void loadDashboard(true), 260);
++    };
++
++    const channel = supabase
++      .channel(`home-dashboard-v11:${userId}`)
++      .on("postgres_changes", { event: "*", schema: "public", table: "friendships" }, refreshSoon)
++      .on("postgres_changes", { event: "*", schema: "public", table: "user_presence" }, refreshSoon)
++      .on("postgres_changes", { event: "*", schema: "public", table: "conversations" }, refreshSoon)
++      .on("postgres_changes", { event: "*", schema: "public", table: "messages" }, refreshSoon)
++      .on("postgres_changes", { event: "*", schema: "public", table: "squads" }, refreshSoon)
++      .on("postgres_changes", { event: "*", schema: "public", table: "squad_members" }, refreshSoon)
++      .on("postgres_changes", { event: "*", schema: "public", table: "lfg_posts_v8" }, refreshSoon)
++      .on("postgres_changes", { event: "*", schema: "public", table: "lfg_applications_v8" }, refreshSoon)
++      .subscribe();
++
++    const refreshOnFocus = () => void loadDashboard(true);
++    window.addEventListener("focus", refreshOnFocus);
++
++    return () => {
++      if (timer) clearTimeout(timer);
++      window.removeEventListener("focus", refreshOnFocus);
++      void supabase.removeChannel(channel);
++    };
++  }, [loadDashboard, userId]);
++
++  return (
++    <div className="home-dashboard-v11">
++      <section className="home-command-v11">
++        <div className="home-command-copy-v11">
++          <span className="home-kicker-v11">CENTRE DE JEU PERSONNALISÉ</span>
++          <h1>Salut {firstName}.</h1>
++          <p>
++            {primaryGame
++              ? `Ton espace pour lancer une session sur ${primaryGame.gameName}, retrouver tes mates et suivre ta squad.`
++              : "Configure ton premier jeu pour personnaliser tes sessions et tes recommandations."}
++          </p>
++          <div className="home-command-actions-v11">
++            <button type="button" className="primary" onClick={onPlay}>▶ Jouer maintenant</button>
++            <button type="button" onClick={onFindMates}>⌕ Trouver des mates</button>
++          </div>
++          <div className="home-live-metrics-v11">
++            <button type="button" onClick={onFriends}><i className="online" /><strong>{data.onlineFriends.length}</strong><span>amis en ligne</span></button>
++            <button type="button" onClick={onMessages}><i className="message" /><strong>{unreadMessages}</strong><span>messages non lus</span></button>
++            <button type="button" onClick={onFriends}><i className="request" /><strong>{pendingFriendRequests}</strong><span>demandes reçues</span></button>
++          </div>
++        </div>
++
++        <button type="button" className={`home-focus-v11 ${voiceSession ? "voice" : ""}`} onClick={voiceSession ? onSquads : onPlay}>
++          <span className="home-focus-orbit-v11"><i /><b />{voiceSession ? "◖◗" : primaryGame?.gameName.slice(0, 2).toUpperCase() ?? "GM"}</span>
++          <span>
++            <small>{voiceSession ? "VOCAL ACTIF" : "PROCHAINE ACTION"}</small>
++            <strong>{voiceSession?.channelName ?? primaryGame?.gameName ?? "Compléter mon profil"}</strong>
++            <em>
++              {voiceSession
++                ? `${voiceSession.participantCount || 1} connecté${voiceSession.participantCount > 1 ? "s" : ""} · ${voiceSession.muted ? "micro coupé" : "micro actif"}`
++                : primaryGame?.platformName ?? "Ajoute ton jeu principal"}
++            </em>
++          </span>
++          <b>→</b>
++        </button>
++      </section>
++
++      {error && <div className="home-degraded-v11"><span>!</span>{error}<button type="button" onClick={() => void loadDashboard()}>Réessayer</button></div>}
++
++      <section className="home-shortcuts-v11">
++        <button type="button" onClick={onPlay}><span>▶</span><strong>Play Now</strong><small>Lancer une recherche</small></button>
++        <button type="button" onClick={onFindMates}><span>⌕</span><strong>Annonces live</strong><small>Rejoindre un groupe</small></button>
++        <button type="button" onClick={onSquads}><span>◇</span><strong>Ma squad</strong><small>{data.squad ? `${data.squad.members.length}/${data.squad.max_members} membres` : "Créer ou rejoindre"}</small></button>
++        <button type="button" onClick={onMessages}><span>✦</span><strong>Messages</strong><small>{unreadMessages > 0 ? `${unreadMessages} à lire` : "Tout est à jour"}</small></button>
++      </section>
++
++      <section className={`home-grid-v11 ${loading ? "is-loading" : ""}`}>
++        <DashboardCard title="Amis connectés" kicker="EN LIGNE" action="Voir tous" onAction={onFriends} className="home-friends-v11">
++          {loading ? <DashboardSkeleton rows={4} /> : data.onlineFriends.length > 0 ? (
++            <div className="home-friend-list-v11">
++              {data.onlineFriends.slice(0, 5).map((friend) => (
++                <div key={friend.id} className="home-friend-v11">
++                  <DashboardAvatar profile={friend} status={friend.status} />
++                  <span><strong>{profileName(friend)}</strong><small>{friend.status === "busy" ? "Occupé" : "Disponible pour jouer"}</small></span>
++                  <button type="button" onClick={() => onOpenMessage(friend.id)} aria-label={`Écrire à ${profileName(friend)}`}>✦</button>
++                </div>
++              ))}
++            </div>
++          ) : <DashboardEmpty icon="♢" title="Aucun ami connecté" text="Tes amis apparaîtront ici dès qu’ils ouvriront GameMate." action="Voir mes amis" onAction={onFriends} />}
++        </DashboardCard>
++
++        <DashboardCard title="Messages récents" kicker="CONVERSATIONS" action="Tout ouvrir" onAction={onMessages} className="home-messages-v11">
++          {loading ? <DashboardSkeleton rows={3} /> : data.conversations.length > 0 ? (
++            <div className="home-conversation-list-v11">
++              {data.conversations.slice(0, 4).map((conversation) => (
++                <button type="button" key={conversation.conversationId} onClick={() => onOpenMessage(conversation.profile.id)}>
++                  <DashboardAvatar profile={conversation.profile} />
++                  <span><strong>{profileName(conversation.profile)}</strong><small>{conversation.message?.body ?? "Conversation prête"}</small></span>
++                  <em>{conversation.unread > 0 ? conversation.unread : relativeTime(conversation.updatedAt)}</em>
++                </button>
++              ))}
++            </div>
++          ) : <DashboardEmpty icon="✦" title="Aucune conversation" text="Trouve un mate et lance la discussion depuis son profil." action="Trouver des mates" onAction={onFindMates} />}
++        </DashboardCard>
++
++        <DashboardCard title="Squad active" kicker="TON GROUPE" action={data.squad ? "Ouvrir" : undefined} onAction={data.squad ? onSquads : undefined} className="home-squad-v11">
++          {loading ? <DashboardSkeleton rows={3} /> : data.squad ? (
++            <div className="home-squad-summary-v11">
++              <div className="home-squad-emblem-v11">◇</div>
++              <div><h3>{data.squad.name}</h3><p>{data.squad.game_name ?? "Squad multigaming"}</p></div>
++              <div className="home-squad-stack-v11">
++                {data.squad.members.slice(0, 5).map((member) => (
++                  <DashboardAvatar key={member.user_id} profile={{ id: member.user_id, username: member.username, display_name: member.display_name, avatar_url: member.avatar_url }} />
++                ))}
++                <span>{data.squad.members.length}/{data.squad.max_members}</span>
++              </div>
++              <button type="button" onClick={onSquads}>Rejoindre l’espace squad <b>→</b></button>
++            </div>
++          ) : <DashboardEmpty icon="◇" title="Aucune squad active" text="Crée une squad ou accepte une invitation pour jouer ensemble." action="Ouvrir les squads" onAction={onSquads} />}
++        </DashboardCard>
++
++        <DashboardCard title="Annonces recommandées" kicker={primaryGame?.gameName.toUpperCase() ?? "LFG EN DIRECT"} action="Voir le flux" onAction={onFindMates} className="home-lfg-v11">
++          {loading ? <DashboardSkeleton rows={3} /> : data.recommendations.length > 0 ? (
++            <div className="home-lfg-list-v11">
++              {data.recommendations.slice(0, 3).map((post) => (
++                <button type="button" key={post.post_id} onClick={onFindMates}>
++                  <span className="home-lfg-game-v11">{post.game_name.slice(0, 2).toUpperCase()}</span>
++                  <span className="home-lfg-copy-v11"><strong>{post.title}</strong><small>{post.owner_display_name || post.owner_username || "Joueur"} · {post.platform_name ?? "Toutes plateformes"}</small></span>
++                  <span className="home-lfg-meta-v11"><strong>{post.current_players}/{post.max_players}</strong><small>{startLabel(post.starts_at)}</small></span>
++                </button>
++              ))}
++            </div>
++          ) : <DashboardEmpty icon="⌕" title="Aucune annonce maintenant" text={primaryGame ? `Il n’y a pas encore d’annonce ouverte pour ${primaryGame.gameName}.` : "Ajoute un jeu à ton profil pour recevoir des recommandations."} action={primaryGame ? "Créer une annonce" : "Configurer mon profil"} onAction={primaryGame ? onFindMates : onProfile} />}
++        </DashboardCard>
++
++        <DashboardCard title="Profil GameMate" kicker="PROGRESSION" action="Modifier" onAction={onProfile} className="home-profile-v11">
++          <button type="button" className="home-profile-progress-v11" onClick={onProfile}>
++            <span style={{ "--dashboard-progress": `${profileCompletion * 3.6}deg` } as React.CSSProperties}><strong>{profileCompletion}%</strong></span>
++            <div>
++              <strong>{profileCompletion === 100 ? "Profil complet" : profileAction(profileCompletion, userGames.length)}</strong>
++              <small>{profileCompletion === 100 ? "Ton matching utilise toutes tes préférences." : "Un profil précis améliore les recommandations et la compatibilité."}</small>
++            </div>
++            <b>›</b>
++          </button>
++        </DashboardCard>
++      </section>
++
++      {refreshing && <span className="home-refreshing-v11">Synchronisation…</span>}
++    </div>
++  );
++}
++
++function DashboardCard({
++  title,
++  kicker,
++  action,
++  onAction,
++  className,
++  children,
++}: {
++  title: string;
++  kicker: string;
++  action?: string;
++  onAction?: () => void;
++  className: string;
++  children: React.ReactNode;
++}) {
++  return (
++    <article className={`home-card-v11 ${className}`}>
++      <header><div><small>{kicker}</small><h2>{title}</h2></div>{action && onAction && <button type="button" onClick={onAction}>{action} <b>›</b></button>}</header>
++      {children}
++    </article>
++  );
++}
++
++function DashboardAvatar({ profile, status }: { profile: FriendProfile; status?: "online" | "busy" }) {
++  return (
++    <span className="home-avatar-v11">
++      {profile.avatar_url ? <img src={profile.avatar_url} alt="" /> : profileName(profile).slice(0, 1).toUpperCase()}
++      {status && <i className={status} />}
++    </span>
++  );
++}
++
++function DashboardEmpty({ icon, title, text, action, onAction }: { icon: string; title: string; text: string; action: string; onAction: () => void }) {
++  return (
++    <div className="home-empty-v11"><span>{icon}</span><strong>{title}</strong><p>{text}</p><button type="button" onClick={onAction}>{action}</button></div>
++  );
++}
++
++function DashboardSkeleton({ rows }: { rows: number }) {
++  return <div className="home-skeleton-v11">{Array.from({ length: rows }, (_, index) => <i key={index} />)}</div>;
++}
++
++function profileName(profile: FriendProfile) {
++  return profile.display_name || profile.username || "Joueur";
++}
++
++function relativeTime(value: string) {
++  const minutes = Math.max(0, Math.floor((Date.now() - new Date(value).getTime()) / 60_000));
++  if (minutes < 1) return "maintenant";
++  if (minutes < 60) return `${minutes} min`;
++  const hours = Math.floor(minutes / 60);
++  if (hours < 24) return `${hours} h`;
++  return `${Math.floor(hours / 24)} j`;
++}
++
++function startLabel(value: string) {
++  const start = new Date(value);
++  const minutes = Math.round((start.getTime() - Date.now()) / 60_000);
++  if (minutes <= 0) return "Maintenant";
++  if (minutes < 60) return `Dans ${minutes} min`;
++  if (minutes < 24 * 60) return `Dans ${Math.round(minutes / 60)} h`;
++  return start.toLocaleDateString("fr-FR", { day: "2-digit", month: "short" });
++}
++
++function profileAction(completion: number, gameCount: number) {
++  if (gameCount === 0) return "Ajoute ton premier jeu";
++  if (completion < 50) return "Continue la configuration";
++  if (completion < 80) return "Précise ton style de jeu";
++  return "Finalise les derniers détails";
++}
+--- /dev/null
++++ b/companion/src/components/HomeDashboard.css
+@@ -0,0 +1,18 @@
++.home-dashboard-v11{position:relative;display:flex;max-width:1500px;margin:0 auto;flex-direction:column;gap:14px;color:#eef4ff}
++.home-command-v11{position:relative;display:grid;min-height:262px;grid-template-columns:minmax(0,1.25fr) minmax(320px,.75fr);align-items:center;gap:28px;overflow:hidden;border:1px solid rgba(var(--accent-rgb,109,55,239),.28);border-radius:22px;padding:30px 34px;background:radial-gradient(circle at 80% 18%,rgba(var(--accent2-rgb,42,220,234),.19),transparent 25%),radial-gradient(circle at 96% 108%,rgba(219,55,223,.18),transparent 30%),radial-gradient(circle at 36% -25%,rgba(var(--accent-rgb,109,55,239),.28),transparent 36%),linear-gradient(120deg,#071a32,#111044 60%,#061528);box-shadow:0 24px 70px rgba(0,0,0,.27)}
++.home-command-v11:after{content:"";position:absolute;right:-95px;bottom:-210px;width:430px;height:430px;border:1px solid rgba(var(--accent2-rgb,42,220,234),.13);border-radius:50%;box-shadow:0 0 0 54px rgba(var(--accent-rgb,109,55,239),.035),0 0 0 108px rgba(var(--accent2-rgb,42,220,234),.025);pointer-events:none}.home-command-copy-v11,.home-focus-v11{position:relative;z-index:1}.home-kicker-v11{color:rgb(var(--accent2-rgb,42,220,234));font-size:8px;font-weight:950;letter-spacing:.17em}.home-command-copy-v11 h1{margin:8px 0 7px;font-size:44px;letter-spacing:-.045em}.home-command-copy-v11>p{max-width:680px;margin:0;color:#8da0b8;font-size:11px;line-height:1.55}.home-command-actions-v11{display:flex;gap:8px;margin-top:20px}.home-command-actions-v11 button{min-height:42px;border:1px solid rgba(98,122,158,.3);border-radius:10px;padding:0 16px;background:rgba(4,15,30,.54);color:#cbd6e5;font-size:9px;font-weight:900;cursor:pointer}.home-command-actions-v11 button.primary{border-color:rgba(var(--accent-rgb,109,55,239),.7);background:linear-gradient(100deg,rgb(var(--accent-rgb,109,55,239)),#284bc0 70%,#127e9a);color:#fff;box-shadow:0 12px 28px rgba(var(--accent-rgb,109,55,239),.2)}
++.home-live-metrics-v11{display:flex;flex-wrap:wrap;gap:7px;margin-top:17px}.home-live-metrics-v11 button{display:flex;min-height:29px;align-items:center;gap:5px;border:1px solid rgba(86,113,150,.2);border-radius:999px;padding:0 9px;background:rgba(3,13,27,.44);color:#7f93ab;cursor:pointer}.home-live-metrics-v11 i{width:6px;height:6px;border-radius:50%;background:#66768c}.home-live-metrics-v11 i.online{background:#35dfa9;box-shadow:0 0 8px #35dfa9}.home-live-metrics-v11 i.message{background:#54c9f0}.home-live-metrics-v11 i.request{background:#a576ff}.home-live-metrics-v11 strong{color:#e8edf6;font-size:9px}.home-live-metrics-v11 span{font-size:7px}
++.home-focus-v11{display:grid;grid-template-columns:72px minmax(0,1fr) auto;align-items:center;gap:13px;border:1px solid rgba(var(--accent2-rgb,42,220,234),.26);border-radius:17px;padding:15px;background:linear-gradient(135deg,rgba(5,20,39,.77),rgba(12,18,49,.68));color:#eef4ff;text-align:left;backdrop-filter:blur(16px);cursor:pointer}.home-focus-v11:hover{border-color:rgba(var(--accent2-rgb,42,220,234),.55);transform:translateY(-1px)}.home-focus-orbit-v11{position:relative;display:grid;width:72px;height:72px;place-items:center;border:1px solid rgba(var(--accent2-rgb,42,220,234),.34);border-radius:21px;background:radial-gradient(circle,rgba(var(--accent-rgb,109,55,239),.34),rgba(4,16,31,.78));color:#d9d1ff;font-size:15px;font-weight:950}.home-focus-orbit-v11 i,.home-focus-orbit-v11 b{position:absolute;width:7px;height:7px;border-radius:50%;background:#39dce7;box-shadow:0 0 10px #39dce7}.home-focus-orbit-v11 i{top:9px;right:10px}.home-focus-orbit-v11 b{bottom:9px;left:10px;background:#9f69ff;box-shadow:0 0 10px #9f69ff}.home-focus-v11.voice .home-focus-orbit-v11{border-color:rgba(52,226,175,.52);color:#64e5bd}.home-focus-v11.voice .home-focus-orbit-v11 i{background:#3fe0af;box-shadow:0 0 12px #3fe0af;animation:home-voice-pulse-v11 1.2s ease-in-out infinite}@keyframes home-voice-pulse-v11{50%{transform:scale(1.7);opacity:.55}}.home-focus-v11>span:nth-child(2){display:flex;min-width:0;flex-direction:column;gap:3px}.home-focus-v11 small{color:#62dce7;font-size:7px;font-weight:950;letter-spacing:.13em}.home-focus-v11 strong{overflow:hidden;font-size:13px;text-overflow:ellipsis;white-space:nowrap}.home-focus-v11 em{overflow:hidden;color:#7e92aa;font-size:7.5px;font-style:normal;text-overflow:ellipsis;white-space:nowrap}.home-focus-v11>b{color:#65dbe6;font-size:18px}
++.home-degraded-v11{display:flex;align-items:center;gap:8px;border:1px solid rgba(245,178,78,.28);border-radius:10px;padding:9px 11px;background:rgba(87,55,8,.18);color:#e6bd77;font-size:8px}.home-degraded-v11>span{display:grid;width:19px;height:19px;place-items:center;border-radius:6px;background:rgba(245,178,78,.13);font-weight:950}.home-degraded-v11 button{margin-left:auto;border:0;background:transparent;color:#f1cf94;font-size:8px;font-weight:900;cursor:pointer}
++.home-shortcuts-v11{display:grid;grid-template-columns:repeat(4,1fr);gap:9px}.home-shortcuts-v11>button{display:grid;min-height:76px;grid-template-columns:44px minmax(0,1fr);grid-template-rows:auto auto;align-content:center;align-items:center;gap:2px 10px;border:1px solid rgba(78,105,143,.23);border-radius:14px;padding:11px;background:linear-gradient(140deg,rgba(7,23,42,.96),rgba(4,14,28,.96));color:#e8edf6;text-align:left;cursor:pointer}.home-shortcuts-v11>button:hover{border-color:rgba(var(--accent-rgb,109,55,239),.62);transform:translateY(-2px);box-shadow:0 12px 30px rgba(0,0,0,.17)}.home-shortcuts-v11>button>span{grid-row:1/3;display:grid;width:42px;height:42px;place-items:center;border:1px solid rgba(var(--accent-rgb,109,55,239),.35);border-radius:12px;background:linear-gradient(135deg,rgba(var(--accent-rgb,109,55,239),.34),rgba(var(--accent2-rgb,42,220,234),.15));color:#ccbfff;font-size:14px}.home-shortcuts-v11 strong{font-size:9px}.home-shortcuts-v11 small{color:#657a94;font-size:7px}
++.home-grid-v11{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:12px}.home-card-v11{display:flex;min-width:0;min-height:270px;flex-direction:column;overflow:hidden;border:1px solid rgba(75,104,143,.23);border-radius:16px;padding:15px;background:linear-gradient(155deg,rgba(7,23,42,.98),rgba(4,14,28,.98));box-shadow:0 15px 45px rgba(0,0,0,.13)}.home-card-v11>header{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}.home-card-v11>header>div{display:flex;min-width:0;flex-direction:column;gap:3px}.home-card-v11 header small{color:#657d98;font-size:6.5px;font-weight:950;letter-spacing:.14em}.home-card-v11 header h2{margin:0;font-size:15px;letter-spacing:-.025em}.home-card-v11>header>button{border:0;background:transparent;color:#8972d9;font-size:7.5px;font-weight:900;cursor:pointer}.home-card-v11>header>button b{font-size:11px}.home-friends-v11{grid-column:span 4}.home-messages-v11{grid-column:span 5}.home-squad-v11{grid-column:span 3}.home-lfg-v11{grid-column:span 8;min-height:260px}.home-profile-v11{grid-column:span 4;min-height:260px}
++.home-avatar-v11{position:relative;display:grid;width:37px;height:37px;flex:0 0 37px;place-items:center;overflow:visible;border:1px solid rgba(var(--accent-rgb,109,55,239),.38);border-radius:11px;background:linear-gradient(135deg,rgba(var(--accent-rgb,109,55,239),.39),rgba(var(--accent2-rgb,42,220,234),.18));color:#eae5ff;font-size:11px;font-weight:950}.home-avatar-v11 img{width:100%;height:100%;border-radius:10px;object-fit:cover}.home-avatar-v11>i{position:absolute;right:-2px;bottom:-2px;width:9px;height:9px;border:2px solid #061425;border-radius:50%;background:#35dfa9;box-shadow:0 0 7px rgba(53,223,169,.7)}.home-avatar-v11>i.busy{background:#f2b94e;box-shadow:0 0 7px rgba(242,185,78,.6)}
++.home-friend-list-v11,.home-conversation-list-v11{display:flex;min-height:0;flex:1;flex-direction:column}.home-friend-v11{display:grid;grid-template-columns:37px minmax(0,1fr) 30px;align-items:center;gap:9px;min-height:49px;border-bottom:1px solid rgba(76,103,138,.13)}.home-friend-v11:last-child{border-bottom:0}.home-friend-v11>span:nth-child(2){display:flex;min-width:0;flex-direction:column;gap:2px}.home-friend-v11 strong,.home-conversation-list-v11 strong{overflow:hidden;font-size:8.5px;text-overflow:ellipsis;white-space:nowrap}.home-friend-v11 small,.home-conversation-list-v11 small{overflow:hidden;color:#647991;font-size:7px;text-overflow:ellipsis;white-space:nowrap}.home-friend-v11>button{display:grid;width:28px;height:28px;place-items:center;border:1px solid rgba(var(--accent-rgb,109,55,239),.28);border-radius:8px;background:rgba(var(--accent-rgb,109,55,239),.08);color:#bba9ff;font-size:9px;cursor:pointer}
++.home-conversation-list-v11>button{display:grid;min-height:53px;grid-template-columns:37px minmax(0,1fr) auto;align-items:center;gap:9px;border:0;border-bottom:1px solid rgba(76,103,138,.13);padding:5px 0;background:transparent;color:#e7edf6;text-align:left;cursor:pointer}.home-conversation-list-v11>button:last-child{border-bottom:0}.home-conversation-list-v11>button>span:nth-child(2){display:flex;min-width:0;flex-direction:column;gap:2px}.home-conversation-list-v11 em{display:grid;min-width:28px;min-height:20px;place-items:center;border-radius:999px;padding:0 6px;background:rgba(var(--accent-rgb,109,55,239),.12);color:#a993ef;font-size:6.5px;font-style:normal;font-weight:950}
++.home-squad-summary-v11{display:grid;flex:1;grid-template-columns:50px minmax(0,1fr);align-content:start;align-items:center;gap:10px}.home-squad-emblem-v11{display:grid;width:48px;height:48px;place-items:center;border:1px solid rgba(var(--accent2-rgb,42,220,234),.33);border-radius:14px;background:linear-gradient(135deg,rgba(var(--accent-rgb,109,55,239),.31),rgba(var(--accent2-rgb,42,220,234),.16));color:#67dde8;font-size:18px}.home-squad-summary-v11 h3{margin:0;font-size:12px}.home-squad-summary-v11 p{margin:3px 0 0;color:#6a7e97;font-size:7px}.home-squad-stack-v11{grid-column:1/-1;display:flex;align-items:center;margin-top:8px}.home-squad-stack-v11 .home-avatar-v11{width:33px;height:33px;flex-basis:33px;margin-right:-7px;border:2px solid #061425;border-radius:50%}.home-squad-stack-v11 .home-avatar-v11 img{border-radius:50%}.home-squad-stack-v11>span{margin-left:13px;color:#70849c;font-size:7px;font-weight:900}.home-squad-summary-v11>button{grid-column:1/-1;display:flex;min-height:38px;align-items:center;justify-content:space-between;margin-top:11px;border:1px solid rgba(var(--accent-rgb,109,55,239),.4);border-radius:9px;padding:0 11px;background:rgba(var(--accent-rgb,109,55,239),.1);color:#d9d1ff;font-size:8px;font-weight:900;cursor:pointer}
++.home-lfg-list-v11{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;flex:1}.home-lfg-list-v11>button{display:grid;min-width:0;grid-template-columns:43px minmax(0,1fr);align-content:start;gap:9px;border:1px solid rgba(77,105,143,.2);border-radius:12px;padding:11px;background:rgba(3,14,27,.57);color:#e8edf6;text-align:left;cursor:pointer}.home-lfg-list-v11>button:hover{border-color:rgba(var(--accent2-rgb,42,220,234),.4)}.home-lfg-game-v11{display:grid;width:41px;height:41px;place-items:center;border:1px solid rgba(var(--accent-rgb,109,55,239),.36);border-radius:11px;background:linear-gradient(135deg,rgba(var(--accent-rgb,109,55,239),.32),rgba(var(--accent2-rgb,42,220,234),.14));color:#cfc4ff;font-size:9px;font-weight:950}.home-lfg-copy-v11{display:flex;min-width:0;flex-direction:column;gap:4px}.home-lfg-copy-v11 strong{display:-webkit-box;overflow:hidden;font-size:8.5px;line-height:1.35;-webkit-box-orient:vertical;-webkit-line-clamp:2}.home-lfg-copy-v11 small{overflow:hidden;color:#687d96;font-size:6.8px;text-overflow:ellipsis;white-space:nowrap}.home-lfg-meta-v11{grid-column:1/-1;display:flex;align-items:center;justify-content:space-between;border-top:1px solid rgba(75,103,138,.14);padding-top:8px}.home-lfg-meta-v11 strong{color:#65dce6;font-size:8px}.home-lfg-meta-v11 small{color:#6d8199;font-size:6.5px}
++.home-profile-progress-v11{display:grid;flex:1;grid-template-columns:76px minmax(0,1fr) auto;align-items:center;gap:13px;border:0;background:transparent;color:#eaf0f8;text-align:left;cursor:pointer}.home-profile-progress-v11>span{--dashboard-progress:0deg;position:relative;display:grid;width:74px;height:74px;place-items:center;border-radius:50%;background:conic-gradient(rgb(var(--accent2-rgb,42,220,234)) var(--dashboard-progress),rgb(var(--accent-rgb,109,55,239)) var(--dashboard-progress),rgba(71,94,126,.24) 0)}.home-profile-progress-v11>span:after{content:"";position:absolute;inset:7px;border-radius:50%;background:#071628}.home-profile-progress-v11>span strong{position:relative;z-index:1;font-size:13px}.home-profile-progress-v11>div{display:flex;min-width:0;flex-direction:column;gap:5px}.home-profile-progress-v11>div strong{font-size:10px}.home-profile-progress-v11>div small{color:#6c8098;font-size:7.3px;line-height:1.5}.home-profile-progress-v11>b{color:#64dbe6;font-size:20px}
++.home-empty-v11{display:flex;min-height:180px;flex:1;align-items:center;justify-content:center;flex-direction:column;text-align:center}.home-empty-v11>span{display:grid;width:42px;height:42px;place-items:center;border:1px solid rgba(var(--accent-rgb,109,55,239),.28);border-radius:13px;background:rgba(var(--accent-rgb,109,55,239),.08);color:#a994ed;font-size:15px}.home-empty-v11>strong{margin-top:9px;font-size:9px}.home-empty-v11>p{max-width:270px;margin:5px 0 10px;color:#63778f;font-size:7.5px;line-height:1.45}.home-empty-v11>button{border:0;background:transparent;color:#9c86e8;font-size:7.5px;font-weight:900;cursor:pointer}.home-skeleton-v11{display:flex;flex:1;flex-direction:column;gap:8px}.home-skeleton-v11 i{height:45px;border-radius:10px;background:linear-gradient(90deg,rgba(73,96,127,.08),rgba(103,130,166,.16),rgba(73,96,127,.08));background-size:200% 100%;animation:home-skeleton-slide-v11 1.4s linear infinite}@keyframes home-skeleton-slide-v11{to{background-position:-200% 0}}.home-refreshing-v11{position:fixed;right:26px;bottom:103px;z-index:170;border:1px solid rgba(80,108,145,.26);border-radius:999px;padding:5px 9px;background:rgba(4,15,29,.9);color:#6f849e;font-size:6.5px}
++@media(max-width:1120px){.home-command-v11{grid-template-columns:1fr}.home-focus-v11{max-width:650px}.home-friends-v11,.home-messages-v11{grid-column:span 6}.home-squad-v11{grid-column:span 12}.home-lfg-v11{grid-column:span 8}.home-profile-v11{grid-column:span 4}}
++@media(max-width:820px){.home-shortcuts-v11{grid-template-columns:repeat(2,1fr)}.home-friends-v11,.home-messages-v11,.home-squad-v11,.home-lfg-v11,.home-profile-v11{grid-column:1/-1}.home-lfg-list-v11{grid-template-columns:1fr}.home-command-v11{padding:23px}.home-command-copy-v11 h1{font-size:37px}}
++@media(max-width:560px){.home-command-v11{padding:18px}.home-command-actions-v11{align-items:stretch;flex-direction:column}.home-focus-v11{grid-template-columns:57px minmax(0,1fr) auto}.home-focus-orbit-v11{width:57px;height:57px;border-radius:16px}.home-shortcuts-v11{grid-template-columns:1fr}.home-live-metrics-v11 button{flex:1;justify-content:center}.home-profile-progress-v11{grid-template-columns:65px minmax(0,1fr) auto}.home-profile-progress-v11>span{width:64px;height:64px}}
+

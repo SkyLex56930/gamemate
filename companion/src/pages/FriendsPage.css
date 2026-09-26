@@ -240,6 +240,24 @@
   object-fit:cover;
 }
 
+/* V15 — présence des amis */
+.friends-avatar{position:relative;overflow:visible}
+.friends-avatar img{border-radius:50%}
+.friends-presence-dot{position:absolute;right:-1px;bottom:-1px;width:11px;height:11px;border:2px solid #061522;border-radius:50%;background:#35e7ad;box-shadow:0 0 8px rgba(53,231,173,.65)}
+.friends-avatar.presence-away .friends-presence-dot{background:#f2b94e;box-shadow:0 0 8px rgba(242,185,78,.55)}
+.friends-avatar.presence-dnd .friends-presence-dot{background:#ff526c;box-shadow:0 0 8px rgba(255,82,108,.55)}
+.friends-avatar.presence-offline .friends-presence-dot{background:#64738a;box-shadow:none}
+.friends-person-copy em{overflow:hidden;color:#6fe0c0;font-size:7.5px;font-style:normal;text-overflow:ellipsis;white-space:nowrap}
+.friends-avatar.presence-away+.friends-person-copy em{color:#deb669}
+.friends-avatar.presence-dnd+.friends-person-copy em{color:#ef8497}
+.friends-avatar.presence-offline+.friends-person-copy em{color:#64758c}
+.friends-presence-card{display:flex;align-items:center;gap:8px;margin:12px 0;border:1px solid rgba(66,104,143,.25);border-radius:8px;padding:9px 10px;background:rgba(6,22,39,.74)}
+.friends-presence-card>i{width:9px;height:9px;flex:0 0 9px;border-radius:50%;background:#35e7ad;box-shadow:0 0 8px rgba(53,231,173,.65)}
+.friends-presence-card.away>i{background:#f2b94e;box-shadow:0 0 8px rgba(242,185,78,.55)}
+.friends-presence-card.dnd>i{background:#ff526c;box-shadow:0 0 8px rgba(255,82,108,.55)}
+.friends-presence-card.offline>i{background:#64738a;box-shadow:none}
+.friends-presence-card>span{display:flex;min-width:0;flex-direction:column;gap:2px}.friends-presence-card strong{font-size:9px}.friends-presence-card small{overflow:hidden;color:#71869e;font-size:7.5px;text-overflow:ellipsis;white-space:nowrap}
+
 .friends-person-copy{
   display:flex;
   min-width:0;

@@ -191,7 +191,7 @@ export default function AvailabilityForm({
               </h2>
 
               <p className="mt-2 text-sm text-slate-400">
-                Pour l'instant, on utilise un créneau principal par jour.
+                {"Pour l'instant, on utilise un créneau principal par jour."}
               </p>
 
               <div className="mt-6 grid gap-5 sm:grid-cols-2">
@@ -277,9 +277,7 @@ export default function AvailabilityForm({
               </p>
 
               <p className="mt-2 text-xs leading-relaxed text-slate-400">
-                Ces informations permettront à GameMate d'éviter
-                de te proposer des joueurs qui ne sont jamais
-                disponibles aux mêmes heures que toi.
+                {"Ces informations permettront à GameMate d'éviter de te proposer des joueurs qui ne sont jamais disponibles aux mêmes heures que toi."}
               </p>
             </div>
           </aside>

@@ -1,0 +1,447 @@
+--- a/companion/src/App.tsx
++++ b/companion/src/App.tsx
+@@ -1,5 +1,5 @@
+ import FindMatesScreen from "./pages/FindMatesPage";
+-import { FormEvent, useEffect, useState, type CSSProperties } from "react";
++import { FormEvent, useCallback, useEffect, useState, type CSSProperties } from "react";
+ import type { Session } from "@supabase/supabase-js";
+ import { getCurrentWindow } from "@tauri-apps/api/window";
+ 
+@@ -15,6 +15,7 @@
+ import SettingsPage, { type AppearanceSettings } from "./pages/SettingsPage";
+ import SupportPage from "./pages/SupportPage";
+ import NotificationCenter from "./components/NotificationCenter";
++import type { VoiceSessionSnapshot } from "./components/SquadVoiceRoom";
+ 
+ import "./App.css";
+ import "./CompanionV8.css";
+@@ -199,6 +200,11 @@
+   const [appearance, setAppearance] = useState<AppearanceSettings>(readAppearanceSettings);
+   const [windowActive, setWindowActive] = useState(true);
+   const [moderationState, setModerationState] = useState<ModerationState>(EMPTY_MODERATION_STATE);
++  const [voiceSession, setVoiceSession] = useState<VoiceSessionSnapshot | null>(null);
++
++  const handleVoiceStateChange = useCallback((snapshot: VoiceSessionSnapshot | null) => {
++    setVoiceSession(snapshot && (snapshot.joined || snapshot.connecting) ? snapshot : null);
++  }, []);
+ 
+   useEffect(() => {
+     let mounted = true;
+@@ -517,6 +523,7 @@
+   }
+ 
+   async function handleLogout() {
++    window.dispatchEvent(new CustomEvent("gamemate:voice-command", { detail: { action: "leave" } }));
+     await supabase.auth.signOut();
+     setPublicProfileUserId(null);
+     setSession(null);
+@@ -993,6 +1000,23 @@
+           )}
+ 
+           <main className={`gm-content gm-section-${section}`}>
++            <div
++              className={`gm-persistent-squads ${section === "squads" && !publicProfileUserId ? "" : "is-hidden"}`}
++              aria-hidden={section !== "squads" || Boolean(publicProfileUserId)}
++            >
++              <SquadsPage
++                session={session}
++                onLogin={() => setShowLogin(true)}
++                onOpenFriends={() => navigateTo("friends")}
++                onOpenMessages={(userId) => {
++                  setMessageTargetUserId(userId);
++                  navigateTo("messages");
++                }}
++                onOpenProfile={(userId) => setPublicProfileUserId(userId)}
++                onVoiceStateChange={handleVoiceStateChange}
++              />
++            </div>
++
+             {publicProfileUserId ? (
+               <PublicProfilePage
+                 userId={publicProfileUserId}
+@@ -1067,19 +1091,6 @@
+                   />
+                 )}
+ 
+-                {section === "squads" && (
+-                  <SquadsPage
+-                    session={session}
+-                    onLogin={() => setShowLogin(true)}
+-                    onOpenFriends={() => navigateTo("friends")}
+-                    onOpenMessages={(userId) => {
+-                      setMessageTargetUserId(userId);
+-                      navigateTo("messages");
+-                    }}
+-                    onOpenProfile={(userId) => setPublicProfileUserId(userId)}
+-                  />
+-                )}
+-
+                 {section === "friends" && (
+                   <FriendsPage
+                     session={session}
+@@ -1156,6 +1167,18 @@
+         </section>
+       </div>
+ 
++      {voiceSession && (
++        <VoiceSessionDock
++          session={voiceSession}
++          onOpen={() => {
++            navigateTo("squads");
++            window.dispatchEvent(new CustomEvent("gamemate:open-squad-tab", {
++              detail: { tab: "chat", channelId: voiceSession.channelId },
++            }));
++          }}
++        />
++      )}
++
+       {session && moderationState.restricted && blockingSanction && section !== "support" && (
+         <div className="gm-sanction-lock">
+           <section className={`gm-sanction-lock-card ${blockingSanction.type}`}>
+@@ -1498,3 +1521,60 @@
+ }
+ 
+ export default App;
++
++function VoiceSessionDock({
++  session,
++  onOpen,
++}: {
++  session: VoiceSessionSnapshot;
++  onOpen: () => void;
++}) {
++  const sendCommand = (action: "toggle-mute" | "toggle-deafen" | "leave") => {
++    window.dispatchEvent(new CustomEvent("gamemate:voice-command", {
++      detail: { action, channelId: session.channelId },
++    }));
++  };
++
++  return (
++    <aside className={`gm-voice-dock ${session.speaking ? "is-speaking" : ""}`} aria-label="Salon vocal actif">
++      <button type="button" className="gm-voice-dock-main" onClick={onOpen}>
++        <span className="gm-voice-dock-signal"><i /><i /><i /></span>
++        <span className="gm-voice-dock-copy">
++          <small>{session.connecting ? "CONNEXION AU VOCAL" : "VOCAL CONNECTÉ"}</small>
++          <strong>{session.channelName}</strong>
++          <em>{session.participantCount || 1} connecté{session.participantCount > 1 ? "s" : ""} · Cliquer pour revenir</em>
++        </span>
++      </button>
++
++      <div className="gm-voice-dock-actions">
++        <button
++          type="button"
++          className={session.muted ? "is-active" : ""}
++          onClick={() => sendCommand("toggle-mute")}
++          aria-label={session.muted ? "Réactiver le microphone" : "Couper le microphone"}
++          title={session.muted ? "Réactiver le microphone" : "Couper le microphone"}
++        >
++          {session.muted ? "×" : "●"}
++        </button>
++        <button
++          type="button"
++          className={session.deafened ? "is-active" : ""}
++          onClick={() => sendCommand("toggle-deafen")}
++          aria-label={session.deafened ? "Réactiver le son" : "Couper le son"}
++          title={session.deafened ? "Réactiver le son" : "Mode sourd"}
++        >
++          ◉
++        </button>
++        <button
++          type="button"
++          className="leave"
++          onClick={() => sendCommand("leave")}
++          aria-label="Quitter le salon vocal"
++          title="Quitter le vocal"
++        >
++          ↘
++        </button>
++      </div>
++    </aside>
++  );
++}
+--- a/companion/src/App.css
++++ b/companion/src/App.css
+@@ -117,6 +117,36 @@
+   overflow:hidden;
+ }
+ 
++.gm-persistent-squads.is-hidden{display:none}
++.gm-persistent-squads{min-width:0;min-height:0}
++
++.gm-voice-dock{
++  position:fixed;
++  z-index:180;
++  right:20px;
++  bottom:20px;
++  display:flex;
++  width:min(430px,calc(100vw - 40px));
++  min-height:72px;
++  align-items:center;
++  gap:10px;
++  border:1px solid rgba(var(--accent-rgb,109,55,239),.48);
++  border-radius:16px;
++  padding:9px;
++  background:radial-gradient(circle at 15% 0,rgba(var(--accent-rgb,109,55,239),.24),transparent 42%),linear-gradient(135deg,rgba(8,25,45,.98),rgba(5,13,27,.98));
++  box-shadow:0 18px 55px rgba(0,0,0,.48),inset 0 1px rgba(255,255,255,.04);
++  backdrop-filter:blur(20px);
++}
++.gm-voice-dock.is-speaking{border-color:rgba(47,226,174,.65);box-shadow:0 18px 55px rgba(0,0,0,.48),0 0 0 4px rgba(47,226,174,.07),inset 0 1px rgba(255,255,255,.04)}
++.gm-voice-dock-main{display:flex;min-width:0;flex:1;align-items:center;gap:10px;border:0;padding:3px;background:transparent;color:#f1f5ff;text-align:left;cursor:pointer}
++.gm-voice-dock-signal{display:flex;width:45px;height:45px;flex:0 0 45px;align-items:center;justify-content:center;gap:3px;border:1px solid rgba(45,221,178,.32);border-radius:13px;background:rgba(30,170,132,.11)}
++.gm-voice-dock-signal i{width:3px;border-radius:99px;background:#43dfb2;box-shadow:0 0 8px rgba(67,223,178,.55);animation:gm-voice-level 1.15s ease-in-out infinite}
++.gm-voice-dock-signal i:nth-child(1){height:11px}.gm-voice-dock-signal i:nth-child(2){height:23px;animation-delay:-.3s}.gm-voice-dock-signal i:nth-child(3){height:16px;animation-delay:-.65s}
++@keyframes gm-voice-level{50%{transform:scaleY(.45);opacity:.62}}
++.gm-voice-dock-copy{display:flex;min-width:0;flex-direction:column;gap:2px}.gm-voice-dock-copy small{color:#4be0b5;font-size:7px;font-weight:950;letter-spacing:.12em}.gm-voice-dock-copy strong{overflow:hidden;font-size:11px;text-overflow:ellipsis;white-space:nowrap}.gm-voice-dock-copy em{overflow:hidden;color:#7187a2;font-size:7px;font-style:normal;text-overflow:ellipsis;white-space:nowrap}
++.gm-voice-dock-actions{display:flex;gap:5px}.gm-voice-dock-actions button{display:grid;width:35px;height:35px;place-items:center;border:1px solid rgba(92,119,157,.24);border-radius:10px;background:rgba(5,17,32,.82);color:#b9c7d9;font-size:11px;cursor:pointer}.gm-voice-dock-actions button:hover{border-color:rgba(var(--accent-light-rgb,178,147,255),.58);color:#fff}.gm-voice-dock-actions button.is-active{border-color:rgba(255,78,117,.52);background:rgba(107,18,45,.4);color:#ff91aa}.gm-voice-dock-actions button.leave{border-color:rgba(255,72,108,.35);color:#ff829f}.gm-voice-dock-actions button.leave:hover{background:rgba(132,17,48,.4)}
++@media(max-width:680px){.gm-voice-dock{right:10px;bottom:10px;width:calc(100vw - 20px)}.gm-voice-dock-copy em{display:none}.gm-voice-dock-actions button{width:32px;height:32px}}
++
+ .gm-sidebar{
+   width:205px;
+   flex:0 0 205px;
+--- a/companion/src/components/SquadVoiceRoom.tsx
++++ b/companion/src/components/SquadVoiceRoom.tsx
+@@ -8,7 +8,7 @@
+   readAudioDevicePreferences,
+ } from "../lib/mediaDevices";
+ 
+-type SquadMember = {
++export type SquadMember = {
+   user_id: string;
+   display_name: string | null;
+   username: string | null;
+@@ -43,12 +43,30 @@
+   speaking?: boolean;
+ };
+ 
++export type VoiceSessionSnapshot = {
++  squadId: string;
++  channelId: string;
++  channelName: string;
++  joined: boolean;
++  connecting: boolean;
++  muted: boolean;
++  deafened: boolean;
++  speaking: boolean;
++  participantCount: number;
++};
++
++type VoiceCommand = {
++  action: "toggle-mute" | "toggle-deafen" | "leave";
++  channelId?: string;
++};
++
+ type Props = {
+   squadId: string;
+   channelId: string;
+   channelName: string;
+   currentUserId: string;
+   members: SquadMember[];
++  onStateChange?: (snapshot: VoiceSessionSnapshot | null) => void;
+ };
+ 
+ function createRtcConfig(): RTCConfiguration {
+@@ -80,6 +98,7 @@
+   channelName,
+   currentUserId,
+   members,
++  onStateChange,
+ }: Props) {
+   const [joined, setJoined] = useState(false);
+   const [connecting, setConnecting] = useState(false);
+@@ -454,8 +473,47 @@
+     return () => {
+       mountedRef.current = false;
+       leaveVoice();
++      onStateChange?.(null);
+     };
+-  }, [channelId, leaveVoice, squadId]);
++  }, [channelId, leaveVoice, onStateChange, squadId]);
++
++  useEffect(() => {
++    onStateChange?.({
++      squadId,
++      channelId,
++      channelName,
++      joined,
++      connecting,
++      muted,
++      deafened,
++      speaking: localSpeaking,
++      participantCount: participants.length,
++    });
++  }, [channelId, channelName, connecting, deafened, joined, localSpeaking, muted, onStateChange, participants.length, squadId]);
++
++  useEffect(() => {
++    const handleVoiceCommand = (event: Event) => {
++      const command = (event as CustomEvent<VoiceCommand>).detail;
++      if (!command || (command.channelId && command.channelId !== channelId)) return;
++
++      if (command.action === "leave") {
++        leaveVoice();
++        return;
++      }
++
++      if (!joined) return;
++
++      if (command.action === "toggle-mute") {
++        applyVoiceControls(!mutedRef.current, deafenedRef.current);
++      } else if (command.action === "toggle-deafen") {
++        const nextDeafened = !deafenedRef.current;
++        applyVoiceControls(mutedRef.current, nextDeafened);
++      }
++    };
++
++    window.addEventListener("gamemate:voice-command", handleVoiceCommand);
++    return () => window.removeEventListener("gamemate:voice-command", handleVoiceCommand);
++  }, [applyVoiceControls, channelId, joined, leaveVoice]);
+ function toggleMute() {
+     applyVoiceControls(!mutedRef.current, deafenedRef.current);
+   }
+--- a/companion/src/pages/SquadsPage.tsx
++++ b/companion/src/pages/SquadsPage.tsx
+@@ -3,7 +3,7 @@
+ import { supabase } from "../lib/supabase";
+ import { playMessageSendSound } from "../lib/audio";
+ import SquadGameSession from "../components/SquadGameSession";
+-import SquadVoiceRoom from "../components/SquadVoiceRoom";
++import SquadVoiceRoom, { type VoiceSessionSnapshot } from "../components/SquadVoiceRoom";
+ import "./SquadsPage.css";
+ 
+ type Props = {
+@@ -12,6 +12,7 @@
+   onOpenFriends: () => void;
+   onOpenMessages: (userId: string) => void;
+   onOpenProfile: (userId: string) => void;
++  onVoiceStateChange?: (snapshot: VoiceSessionSnapshot | null) => void;
+ };
+ 
+ type Game = {
+@@ -130,6 +131,7 @@
+   onOpenFriends,
+   onOpenMessages,
+   onOpenProfile,
++  onVoiceStateChange,
+ }: Props) {
+   const [state, setState] = useState<SquadState>(EMPTY_STATE);
+   const [games, setGames] = useState<Game[]>([]);
+@@ -253,10 +255,16 @@
+ 
+   useEffect(() => {
+     function openRequestedTab(event: Event) {
+-      const requested = (event as CustomEvent<string>).detail;
+-      if (requested === "session") {
++      const requested = (event as CustomEvent<string | { tab: string; channelId?: string }>).detail;
++      const requestedTab = typeof requested === "string" ? requested : requested?.tab;
++      if (requestedTab === "session") {
+         sessionStorage.removeItem(SQUAD_TAB_REQUEST_KEY);
+         setTab("session");
++      } else if (requestedTab === "chat") {
++        setTab("chat");
++        if (typeof requested !== "string" && requested.channelId) {
++          setSelectedChannelId(requested.channelId);
++        }
+       }
+     }
+ 
+@@ -782,7 +790,7 @@
+               />
+             )}
+ 
+-            {tab === "chat" && (
++            <div className={`team-persistent-chat ${tab === "chat" ? "" : "is-hidden"}`} aria-hidden={tab !== "chat"}>
+               <TeamChat
+                 squadId={squad.squad_id}
+                 members={squad.members}
+@@ -815,8 +823,9 @@
+                   setEditingChannelName("");
+                 }}
+                 onDeleteChannel={(channel) => void deleteChannel(channel)}
++                onVoiceStateChange={onVoiceStateChange}
+               />
+-            )}
++            </div>
+ 
+             {tab === "invite" && isOwner && (
+               <InviteFriends
+@@ -1175,6 +1184,7 @@
+   onRenameChannel,
+   onCancelRename,
+   onDeleteChannel,
++  onVoiceStateChange,
+ }: {
+   squadId: string;
+   members: Member[];
+@@ -1201,7 +1211,9 @@
+   onRenameChannel: (channelId: string) => void;
+   onCancelRename: () => void;
+   onDeleteChannel: (channel: SquadChannel) => void;
++  onVoiceStateChange?: (snapshot: VoiceSessionSnapshot | null) => void;
+ }) {
++  const [retainedVoiceChannelId, setRetainedVoiceChannelId] = useState<string | null>(null);
+   const selectedChannel =
+     channels.find((channel) => channel.id === selectedChannelId) ??
+     channels[0] ??
+@@ -1209,6 +1221,21 @@
+ 
+   const textChannels = channels.filter((channel) => channel.channel_type === "text");
+   const voiceChannels = channels.filter((channel) => channel.channel_type === "voice");
++  const retainedVoiceChannel = retainedVoiceChannelId
++    ? voiceChannels.find((channel) => channel.id === retainedVoiceChannelId) ?? null
++    : null;
++  const selectedVoiceChannel = selectedChannel?.channel_type === "voice" ? selectedChannel : null;
++  const voiceChannelToRender = retainedVoiceChannel ?? selectedVoiceChannel;
++  const showVoicePanel = Boolean(selectedVoiceChannel);
++
++  const handleVoiceStateChange = useCallback((snapshot: VoiceSessionSnapshot | null) => {
++    setRetainedVoiceChannelId((current) => {
++      if (snapshot?.joined || snapshot?.connecting) return snapshot.channelId;
++      if (!snapshot || snapshot.channelId === current) return null;
++      return current;
++    });
++    onVoiceStateChange?.(snapshot);
++  }, [onVoiceStateChange]);
+ 
+   return (
+     <div className="team-chat-shell">
+@@ -1287,15 +1314,20 @@
+         )}
+       </aside>
+ 
+-      {selectedChannel?.channel_type === "voice" ? (
+-        <SquadVoiceRoom
+-          squadId={squadId}
+-          channelId={selectedChannel.id}
+-          channelName={selectedChannel.name}
+-          currentUserId={currentUserId}
+-          members={members}
+-        />
+-      ) : (
++      {voiceChannelToRender && (
++        <div className={`team-persistent-voice ${showVoicePanel ? "" : "is-hidden"}`} aria-hidden={!showVoicePanel}>
++          <SquadVoiceRoom
++            squadId={squadId}
++            channelId={voiceChannelToRender.id}
++            channelName={voiceChannelToRender.name}
++            currentUserId={currentUserId}
++            members={members}
++            onStateChange={handleVoiceStateChange}
++          />
++        </div>
++      )}
++
++      {!showVoicePanel && (
+         <div className="team-chat">
+           <header className="team-chat-head">
+             <div>
+--- a/companion/src/pages/SquadsPage.css
++++ b/companion/src/pages/SquadsPage.css
+@@ -1120,6 +1120,8 @@
+ @media(max-width:760px){.game-session-head{grid-template-columns:52px 1fr;padding:14px}.game-session-live{grid-column:1/-1;width:max-content}.game-session-signal{width:48px;height:48px;border-radius:14px}.game-session-create{grid-template-columns:1fr;width:calc(100% - 24px);margin:28px auto;padding:18px}.game-session-member-list{grid-template-columns:1fr}.game-session-summary>div:not(.game-session-progress){grid-template-columns:1fr;padding:10px}.game-session-form.compact{grid-template-columns:1fr}.game-session-form.compact label:first-child,.game-session-form.compact>button{grid-column:auto}.game-session-status-actions{grid-template-columns:1fr}.game-session-status-actions button{min-height:58px}}
+ 
+ /* GameMate V10 — salon vocal réel */
++.team-persistent-chat.is-hidden,.team-persistent-voice.is-hidden{display:none}
++.team-persistent-chat,.team-persistent-voice{width:100%;min-width:0;min-height:0}
+ .voice-room{display:flex;min-width:0;min-height:650px;flex-direction:column;overflow:hidden;background:radial-gradient(circle at 72% 0,rgba(var(--accent-rgb,109,55,239),.17),transparent 33%),linear-gradient(150deg,#061629,#030b16);color:#eef4ff}
+ .voice-room-head{position:relative;display:grid;grid-template-columns:64px minmax(0,1fr) auto;align-items:center;gap:14px;min-height:105px;border-bottom:1px solid rgba(91,119,158,.2);padding:17px 20px;background:linear-gradient(90deg,rgba(var(--accent-rgb,109,55,239),.08),transparent)}
+ .voice-room-head h2{margin:4px 0 3px;font-size:21px;letter-spacing:-.035em}.voice-room-head p{margin:0;color:#70849e;font-size:8.5px}.voice-room-orb{position:relative;display:grid;width:58px;height:58px;place-items:center;border:1px solid rgba(var(--accent-rgb,109,55,239),.36);border-radius:18px;background:radial-gradient(circle,rgba(var(--accent-rgb,109,55,239),.23),rgba(4,14,29,.8));color:rgb(var(--accent-light-rgb,178,147,255));font-size:17px;box-shadow:inset 0 0 24px rgba(var(--accent-rgb,109,55,239),.08)}.voice-room-orb i,.voice-room-orb b{position:absolute;width:6px;height:6px;border-radius:50%;background:#64758e}.voice-room-orb i{top:8px;right:9px}.voice-room-orb b{bottom:8px;left:9px}.voice-room-orb.connected{border-color:rgba(42,221,176,.45);box-shadow:inset 0 0 25px rgba(42,221,176,.1),0 0 20px rgba(42,221,176,.08)}.voice-room-orb.connected i{background:#35e0ae;box-shadow:0 0 10px #35e0ae}.voice-room-orb.speaking{animation:voice-orb-pulse 1.25s ease-in-out infinite;border-color:#37e7b6;box-shadow:0 0 0 5px rgba(55,231,182,.07),0 0 25px rgba(55,231,182,.16)}
+

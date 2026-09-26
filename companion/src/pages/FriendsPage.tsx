@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase";
+import { Icon } from "../components/Icon";
+import { lastSeenLabel, presenceActivity, presenceLabel, type PresenceSnapshot } from "../lib/presence";
 import "./FriendsPage.css";
 
 type Props = {
@@ -18,6 +20,7 @@ type FriendProfile = {
   bio: string | null;
   region: string | null;
   language: string | null;
+  presence: PresenceSnapshot;
 };
 
 type FriendshipRow = {
@@ -60,7 +63,7 @@ export default function FriendsPage({
   const [confirmBlock, setConfirmBlock] = useState<RequestWithProfile | null>(null);
   const [confirmRemove, setConfirmRemove] = useState<RequestWithProfile | null>(null);
 
-  const loadAll = useCallback(async () => {
+  const loadAll = useCallback(async (background = false) => {
     if (!session?.user?.id) {
       setFriends([]);
       setReceived([]);
@@ -70,7 +73,7 @@ export default function FriendsPage({
       return;
     }
 
-    setLoading(true);
+    if (!background) setLoading(true);
     setError("");
 
     const userId = session.user.id;
@@ -124,20 +127,27 @@ export default function FriendsPage({
       return;
     }
 
-    const { data: profilesData, error: profilesError } = await supabase
-      .from("profiles")
-      .select("id, username, display_name, avatar_url, bio, region, language")
-      .in("id", profileIds);
+    const [profilesResult, presenceResult] = await Promise.all([
+      supabase
+        .from("profiles")
+        .select("id, username, display_name, avatar_url, bio, region, language")
+        .in("id", profileIds),
+      supabase.rpc("get_presence_v15", { p_user_ids: profileIds }),
+    ]);
 
-    if (profilesError) {
-      console.error("Friends / profiles:", profilesError);
+    if (profilesResult.error || presenceResult.error) {
+      console.error("Friends / profiles:", profilesResult.error ?? presenceResult.error);
       setError("Impossible de charger les profils.");
       setLoading(false);
       return;
     }
 
+    const presenceMap = new Map<string, PresenceSnapshot>(
+      ((presenceResult.data ?? []) as PresenceSnapshot[]).map((presence) => [presence.user_id, presence])
+    );
+
     const profileMap = new Map<string, FriendProfile>(
-      (profilesData ?? []).map((profile) => [
+      (profilesResult.data ?? []).map((profile) => [
         profile.id,
         {
           user_id: profile.id,
@@ -147,6 +157,7 @@ export default function FriendsPage({
           bio: profile.bio,
           region: profile.region,
           language: profile.language,
+          presence: presenceMap.get(profile.id) ?? offlinePresence(profile.id),
         },
       ])
     );
@@ -204,7 +215,7 @@ export default function FriendsPage({
             previous?.requester_id === userId ||
             previous?.addressee_id === userId
           ) {
-            void loadAll();
+            void loadAll(true);
           }
         }
       )
@@ -219,15 +230,26 @@ export default function FriendsPage({
           const next = payload.new as Partial<BlockRow> | null;
           const previous = payload.old as Partial<BlockRow> | null;
           if (next?.blocker_id === userId || previous?.blocker_id === userId) {
-            void loadAll();
+            void loadAll(true);
           }
         }
       )
       .subscribe();
 
+    const presenceChannel = supabase
+      .channel(`friends-presence-v15:${userId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "user_presence" }, () => {
+        void loadAll(true);
+      })
+      .subscribe();
+
+    const freshnessTimer = window.setInterval(() => void loadAll(true), 45_000);
+
     return () => {
+      window.clearInterval(freshnessTimer);
       void supabase.removeChannel(friendshipsChannel);
       void supabase.removeChannel(blocksChannel);
+      void supabase.removeChannel(presenceChannel);
     };
   }, [session?.user?.id, loadAll]);
 
@@ -344,6 +366,8 @@ export default function FriendsPage({
           ? "Ta squad est complète."
           : actionError.message.includes("blocked")
           ? "Cette invitation n’est pas autorisée."
+          : actionError.message.includes("squad_invites_disabled")
+          ? "Cet ami n’accepte pas les invitations de squad."
           : "Impossible d’envoyer l’invitation."
       );
     } else {
@@ -430,7 +454,7 @@ export default function FriendsPage({
         <main className="friends-main">
           <div className="friends-toolbar">
             <label className="friends-search">
-              <span>⌕</span>
+              <Icon name="search" size={17} />
               <input
                 type="text"
                 value={query}
@@ -455,6 +479,8 @@ export default function FriendsPage({
                   onSelect={() => setSelectedFriendId(row.profile.user_id)}
                   onMessage={() => onOpenMessages(row.profile.user_id)}
                   onProfile={() => onOpenProfile(row.profile.user_id)}
+                  working={workingId === row.id}
+                  onInvite={() => void inviteFriendToSquad(row)}
                 />
               ))}
 
@@ -494,12 +520,20 @@ export default function FriendsPage({
 
         {selectedFriend && tab === "friends" && (
           <aside className="friends-detail">
-            <button className="friends-detail-close" type="button" onClick={() => setSelectedFriendId(null)}>×</button>
+            <button className="friends-detail-close" type="button" onClick={() => setSelectedFriendId(null)} aria-label="Fermer"><Icon name="close" size={17} /></button>
             <Avatar profile={selectedFriend.profile} large />
             <h2>{friendName(selectedFriend.profile)}</h2>
             <span className="friends-handle">
               {selectedFriend.profile.username ? `@${selectedFriend.profile.username}` : "Profil GameMate"}
             </span>
+
+            <div className={`friends-presence-card ${selectedFriend.profile.presence.status}`}>
+              <i />
+              <span>
+                <strong>{presenceLabel(selectedFriend.profile.presence.status)}</strong>
+                <small>{friendPresenceText(selectedFriend.profile)}</small>
+              </span>
+            </div>
 
             {selectedFriend.profile.bio && <p>{selectedFriend.profile.bio}</p>}
 
@@ -562,11 +596,29 @@ function friendName(profile: FriendProfile) {
   return profile.display_name || profile.username || "Joueur GameMate";
 }
 
+function offlinePresence(userId: string): PresenceSnapshot {
+  return {
+    user_id: userId,
+    status: "offline",
+    custom_status: null,
+    activity_game_id: null,
+    activity_game_name: null,
+    activity_text: null,
+    last_seen_at: null,
+  };
+}
+
+function friendPresenceText(profile: FriendProfile) {
+  if (profile.presence.status === "offline") return lastSeenLabel(profile.presence.last_seen_at);
+  return presenceActivity(profile.presence);
+}
+
 function Avatar({ profile, large = false }: { profile: FriendProfile; large?: boolean }) {
   const name = friendName(profile);
   return (
-    <span className={`friends-avatar ${large ? "large" : ""}`}>
+    <span className={`friends-avatar ${large ? "large" : ""} presence-${profile.presence.status}`}>
       {profile.avatar_url ? <img src={profile.avatar_url} alt={name} /> : name.slice(0, 1).toUpperCase()}
+      <i className="friends-presence-dot" aria-hidden="true" />
     </span>
   );
 }
@@ -598,12 +650,16 @@ function FriendRow({
   onSelect,
   onMessage,
   onProfile,
+  working,
+  onInvite,
 }: {
   row: RequestWithProfile;
   selected: boolean;
   onSelect: () => void;
   onMessage: () => void;
   onProfile: () => void;
+  working: boolean;
+  onInvite: () => void;
 }) {
   const profile = row.profile;
   return (
@@ -616,13 +672,15 @@ function FriendRow({
             {profile.username ? `@${profile.username}` : "GameMate"}
             {profile.region ? ` · ${profile.region}` : ""}
           </small>
+          <em>{friendPresenceText(profile)}</em>
         </span>
       </button>
 
       <div className="friends-row-actions">
         <button type="button" className="primary" onClick={onMessage}>Message</button>
+        <button type="button" disabled={working} onClick={onInvite} title="Inviter dans ma squad"><Icon name="user-plus" size={15} /></button>
         <button type="button" onClick={onProfile}>Profil</button>
-        <button type="button" className="more" onClick={onSelect} aria-label="Plus d’actions">•••</button>
+        <button type="button" className="more" onClick={onSelect} aria-label="Plus d’actions"><Icon name="more-horizontal" size={17} /></button>
       </div>
     </article>
   );
@@ -657,7 +715,7 @@ function ReceivedRow({
         <button type="button" className="primary" disabled={working} onClick={onAccept}>Accepter</button>
         <button type="button" disabled={working} onClick={onReject}>Refuser</button>
         <button type="button" onClick={onProfile}>Profil</button>
-        <button type="button" className="danger-icon" disabled={working} onClick={onBlock} title="Bloquer">×</button>
+        <button type="button" className="danger-icon" disabled={working} onClick={onBlock} title="Bloquer"><Icon name="ban" size={16} /></button>
       </div>
     </article>
   );
@@ -730,7 +788,7 @@ function EmptyState({ tab }: { tab: Tab }) {
 
   return (
     <div className="friends-empty">
-      <span>♢</span>
+      <span><Icon name={tab === "blocked" ? "ban" : "users"} size={28} /></span>
       <strong>{copy[0]}</strong>
       <p>{copy[1]}</p>
     </div>

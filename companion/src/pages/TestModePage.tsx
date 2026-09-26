@@ -3,6 +3,7 @@ import type { Session } from "@supabase/supabase-js";
 import { supabaseTest } from "../lib/supabaseTest";
 import "./TestModePage.css";
 import TestSupportPanel from "./TestSupportPanel";
+import { Icon } from "../components/Icon";
 
 type Props = {
   mainSession: Session | null;
@@ -554,7 +555,7 @@ export default function TestModePage({
                 </div>
 
                 <div className="tm2-link">
-                  <span>↔</span>
+                  <span><Icon name="link" /></span>
                   <small>
                     {friendshipWithMain === "accepted"
                       ? "Amis"

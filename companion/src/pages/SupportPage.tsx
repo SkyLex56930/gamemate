@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase";
+import { Icon } from "../components/Icon";
 import "./SupportPage.css";
 
 type Ticket = {
@@ -489,8 +490,8 @@ export default function SupportPage({
                 <span className="support-kicker">NOUVELLE DEMANDE</span>
                 <h2>Créer un ticket</h2>
               </div>
-              <button type="button" onClick={() => setShowCreateTicket(false)}>
-                ×
+              <button type="button" onClick={() => setShowCreateTicket(false)} aria-label="Fermer">
+                <Icon name="close" size={17} />
               </button>
             </header>
 

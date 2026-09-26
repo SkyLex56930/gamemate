@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState, type CSSProperties, type KeyboardEvent } 
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase";
 import LfgBoard from "../components/LfgBoard";
-import { Icon, type IconName } from "../components/Icon";
 import "./FindMatesPage.css";
 
 type UserGame = {
@@ -80,7 +79,7 @@ type MateProfile = {
   shared_looking_for_count: number;
   availability_match: boolean;
   availability_summary: AvailabilitySummary | null;
-  presence_status: "online" | "away" | "dnd" | "busy" | "offline";
+  presence_status: "online" | "busy" | "offline";
   last_seen_at: string | null;
   friendship_id: string | null;
   friendship_state: FriendshipState;
@@ -167,7 +166,7 @@ export default function FindMatesPage({
   const sortedResults = useMemo(() => {
     const next = [...results];
     if (sortMode === "online") {
-      const presenceWeight = { online: 0, away: 1, busy: 2, dnd: 2, offline: 3 };
+      const presenceWeight = { online: 0, busy: 1, offline: 2 };
       return next.sort((a, b) =>
         presenceWeight[a.presence_status] - presenceWeight[b.presence_status]
         || b.compatibility_score - a.compatibility_score
@@ -320,7 +319,7 @@ export default function FindMatesPage({
   if (!session) {
     return (
       <section className="fmx-locked">
-        <div className="fmx-lock-visual"><span><Icon name="lock" size={30} /></span></div>
+        <div className="fmx-lock-visual"><span>⌁</span></div>
         <div>
           <span className="fmx-eyebrow">DÉCOUVERTE GAMEMATE</span>
           <h1>Tes prochains mates sont peut-être déjà là.</h1>
@@ -335,10 +334,10 @@ export default function FindMatesPage({
     <div className="fmx fmx-v7 fmx-v8">
       <nav className="fmx-mode-switch" aria-label="Mode de recherche">
         <button type="button" className={discoveryMode === "matching" ? "active" : ""} onClick={() => setDiscoveryMode("matching")}>
-          <span><Icon name="sparkles" /></span><span><strong>Matching intelligent</strong><small>Profils compatibles</small></span>
+          <span>✦</span><span><strong>Matching intelligent</strong><small>Profils compatibles</small></span>
         </button>
         <button type="button" className={discoveryMode === "live" ? "active" : ""} onClick={() => setDiscoveryMode("live")}>
-          <span className="live-dot"><Icon name="activity" size={17} /></span><span><strong>Annonces en direct</strong><small>Jouer maintenant</small></span>
+          <span className="live-dot">●</span><span><strong>Annonces en direct</strong><small>Jouer maintenant</small></span>
         </button>
       </nav>
 
@@ -368,7 +367,7 @@ export default function FindMatesPage({
             <strong>{profileCompletion >= 80 ? "Profil prêt" : "Profil à compléter"}</strong>
             <em>Plus ton profil est précis, plus le score est utile.</em>
           </span>
-          <Icon name="chevron-right" size={18} />
+          <b>›</b>
         </button>
       </header>
 
@@ -401,7 +400,7 @@ export default function FindMatesPage({
           </div>
 
           <label className="fmx-query">
-            <Icon name="search" size={17} />
+            <span>⌕</span>
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
@@ -412,14 +411,14 @@ export default function FindMatesPage({
 
           <div className="fmx-quick-filters">
             <FilterToggle
-              icon="mic"
+              icon="◉"
               title="Micro obligatoire"
               description="Uniquement les joueurs avec micro."
               checked={micOnly}
               onChange={setMicOnly}
             />
             <FilterToggle
-              icon="link"
+              icon="↔"
               title="Crossplay autorisé"
               description="Inclure les autres plateformes compatibles."
               checked={crossplay}
@@ -428,13 +427,13 @@ export default function FindMatesPage({
           </div>
 
           <button className="fmx-advanced-trigger" type="button" onClick={() => setShowAdvanced((value) => !value)}>
-            <span>Critères avancés</span><b><Icon name={showAdvanced ? "minus" : "plus"} size={16} /></b>
+            <span>Critères avancés</span><b>{showAdvanced ? "−" : "+"}</b>
           </button>
 
           {showAdvanced ? (
             <div className="fmx-advanced">
               <FilterToggle
-                icon="trophy"
+                icon="◆"
                 title="Même rang"
                 description={selectedGame?.rank_text ? selectedGame.rank_text : "Renseigne ton rang dans le profil."}
                 checked={sameRank}
@@ -442,7 +441,7 @@ export default function FindMatesPage({
                 disabled={!selectedGame?.rank_text}
               />
               <FilterToggle
-                icon="target"
+                icon="◇"
                 title="Même rôle"
                 description={selectedGame?.role_text ? selectedGame.role_text : "Renseigne ton rôle dans le profil."}
                 checked={sameRole}
@@ -450,17 +449,17 @@ export default function FindMatesPage({
                 disabled={!selectedGame?.role_text}
               />
               <FilterToggle
-                icon="layout-grid"
+                icon="▣"
                 title="Même mode"
                 description={selectedGame?.mode_text ? selectedGame.mode_text : "Renseigne ton mode dans le profil."}
                 checked={sameMode}
                 onChange={setSameMode}
                 disabled={!selectedGame?.mode_text}
               />
-              <FilterToggle icon="globe" title="Même langue" description="Communication plus simple." checked={sameLanguage} onChange={setSameLanguage} />
-              <FilterToggle icon="map-pin" title="Même région" description="Fuseau et serveurs proches." checked={sameRegion} onChange={setSameRegion} />
+              <FilterToggle icon="◈" title="Même langue" description="Communication plus simple." checked={sameLanguage} onChange={setSameLanguage} />
+              <FilterToggle icon="⌖" title="Même région" description="Fuseau et serveurs proches." checked={sameRegion} onChange={setSameRegion} />
               <FilterToggle
-                icon="clock"
+                icon="◷"
                 title="Créneau en commun"
                 description={availability.length ? `${availability.length} créneau(x) configuré(s).` : "Ajoute tes disponibilités dans le profil."}
                 checked={commonAvailability}
@@ -477,7 +476,7 @@ export default function FindMatesPage({
           </div>
 
           <button className="fmx-search-button" type="button" disabled={!selectedGame || loading} onClick={() => void searchMates()}>
-            <span>{loading ? "Calcul des compatibilités…" : "Trouver mes meilleurs mates"}</span><Icon name="arrow-right" size={18} />
+            <span>{loading ? "Calcul des compatibilités…" : "Trouver mes meilleurs mates"}</span><b>→</b>
           </button>
           {activeFilterCount > 0 ? (
             <button className="fmx-reset" type="button" onClick={resetFilters}>Réinitialiser les filtres</button>
@@ -524,7 +523,7 @@ export default function FindMatesPage({
             </div>
           ) : sortedResults.length === 0 ? (
             <div className="fmx-state">
-              <span className="fmx-state-icon"><Icon name="search" size={28} /></span>
+              <span className="fmx-state-icon">⌁</span>
               <h3>Aucun mate avec ces critères.</h3>
               <p>Élargis les filtres ou active le crossplay pour voir davantage de profils.</p>
               <button type="button" onClick={resetFilters}>Élargir la recherche</button>
@@ -556,7 +555,7 @@ export default function FindMatesPage({
 }
 
 function FilterToggle({ icon, title, description, checked, onChange, disabled = false }: {
-  icon: IconName;
+  icon: string;
   title: string;
   description: string;
   checked: boolean;
@@ -571,7 +570,7 @@ function FilterToggle({ icon, title, description, checked, onChange, disabled = 
       onClick={() => onChange(!checked)}
       aria-pressed={checked}
     >
-      <span className="fmx-toggle-icon"><Icon name={icon} /></span>
+      <span className="fmx-toggle-icon">{icon}</span>
       <span><strong>{title}</strong><small>{description}</small></span>
       <i><b /></i>
     </button>
@@ -641,8 +640,8 @@ function MateCard({
 
       <div className="fmx-platform-line">
         <span>{mate.platform_name ?? "Plateforme non renseignée"}</span>
-        {mate.mic_enabled ? <span><Icon name="mic" size={13} /> Micro</span> : null}
-        {mate.crossplay_enabled ? <span><Icon name="link" size={13} /> Crossplay</span> : null}
+        {mate.mic_enabled ? <span>● Micro</span> : null}
+        {mate.crossplay_enabled ? <span>↔ Crossplay</span> : null}
       </div>
 
       <p className="fmx-bio">{mate.bio || "Présentation non renseignée ou privée."}</p>
@@ -653,11 +652,11 @@ function MateCard({
         {mate.mode_text ? <Meta label="Mode" value={mate.mode_text} /> : null}
       </div>
 
-      {availabilityLabel ? <div className="fmx-common-slot"><span><Icon name="clock" /></span><strong>Créneau commun</strong><small>{availabilityLabel}</small></div> : null}
+      {availabilityLabel ? <div className="fmx-common-slot"><span>◷</span><strong>Créneau commun</strong><small>{availabilityLabel}</small></div> : null}
 
       <div className="fmx-reasons">
         {mate.match_reasons.slice(0, 4).map((reason) => (
-          <span key={reason.label}><Icon name="check" size={12} /> {reason.label}</span>
+          <span key={reason.label}>✓ {reason.label}</span>
         ))}
       </div>
 
@@ -691,7 +690,7 @@ function MateCard({
             {busy === `squad-${mate.user_id}` ? "Invitation…" : "Inviter"}
           </button>
         ) : null}
-        <button type="button" className="profile" onClick={onOpenProfile}>Profil <Icon name="arrow-right" size={14} /></button>
+        <button type="button" className="profile" onClick={onOpenProfile}>Profil →</button>
       </div>
     </article>
   );
@@ -727,7 +726,7 @@ function FriendAction({
   }
   return (
     <button type="button" className="primary" disabled={busy === `friend-${mate.user_id}`} onClick={onSend}>
-      {busy === `friend-${mate.user_id}` ? "Envoi…" : <><Icon name="user-plus" size={15} /> Ami</>}
+      {busy === `friend-${mate.user_id}` ? "Envoi…" : "+ Ami"}
     </button>
   );
 }
@@ -746,8 +745,7 @@ function userGameKey(game: Pick<UserGame, "game_id" | "platform_id">) {
 
 function presenceLabel(status: MateProfile["presence_status"]) {
   if (status === "online") return "En ligne";
-  if (status === "away") return "Absent";
-  if (status === "busy" || status === "dnd") return "Ne pas déranger";
+  if (status === "busy") return "Occupé";
   return "Hors ligne";
 }
 

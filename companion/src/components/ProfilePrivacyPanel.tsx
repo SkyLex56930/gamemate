@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
+import { Icon, type IconName } from "./Icon";
 import "./ProfilePrivacyPanel.css";
 
 type PrivacySettings = {
@@ -10,6 +11,7 @@ type PrivacySettings = {
   show_gaming_dna: boolean;
   show_looking_for: boolean;
   show_availability: boolean;
+  show_last_seen: boolean;
   allow_friend_requests: boolean;
   allow_squad_invites: boolean;
 };
@@ -22,6 +24,7 @@ const defaultSettings: PrivacySettings = {
   show_gaming_dna: true,
   show_looking_for: true,
   show_availability: true,
+  show_last_seen: true,
   allow_friend_requests: true,
   allow_squad_invites: true,
 };
@@ -30,25 +33,26 @@ const visibilityRows: Array<{
   key: keyof PrivacySettings;
   title: string;
   description: string;
-  icon: string;
+  icon: IconName;
 }> = [
-  { key: "show_bio", title: "Présentation", description: "Affiche ta bio sur ton profil joueur.", icon: "✎" },
-  { key: "show_region", title: "Région", description: "Affiche uniquement la région que tu as saisie.", icon: "⌖" },
-  { key: "show_language", title: "Langue", description: "Aide les autres joueurs à savoir dans quelle langue jouer.", icon: "◈" },
-  { key: "show_games", title: "Jeux et niveaux", description: "Affiche tes jeux, plateformes, rangs, rôles et modes.", icon: "▶" },
-  { key: "show_gaming_dna", title: "Gaming DNA", description: "Affiche les tags qui décrivent ton style de jeu.", icon: "✦" },
-  { key: "show_looking_for", title: "Ce que je recherche", description: "Affiche tes intentions : détente, classement, groupe régulier…", icon: "⌕" },
-  { key: "show_availability", title: "Disponibilités", description: "Autorise le matching à comparer tes créneaux avec ceux des autres joueurs.", icon: "◷" },
+  { key: "show_bio", title: "Présentation", description: "Affiche ta bio sur ton profil joueur.", icon: "edit" },
+  { key: "show_region", title: "Région", description: "Affiche uniquement la région que tu as saisie.", icon: "map-pin" },
+  { key: "show_language", title: "Langue", description: "Aide les autres joueurs à savoir dans quelle langue jouer.", icon: "globe" },
+  { key: "show_games", title: "Jeux et niveaux", description: "Affiche tes jeux, plateformes, rangs, rôles et modes.", icon: "gamepad" },
+  { key: "show_gaming_dna", title: "Gaming DNA", description: "Affiche les tags qui décrivent ton style de jeu.", icon: "sparkles" },
+  { key: "show_looking_for", title: "Ce que je recherche", description: "Affiche tes intentions : détente, classement, groupe régulier…", icon: "search" },
+  { key: "show_availability", title: "Disponibilités", description: "Autorise le matching à comparer tes créneaux avec ceux des autres joueurs.", icon: "clock" },
+  { key: "show_last_seen", title: "Dernière activité", description: "Autorise tes amis à voir quand tu as utilisé GameMate pour la dernière fois.", icon: "activity" },
 ];
 
 const interactionRows: Array<{
   key: keyof PrivacySettings;
   title: string;
   description: string;
-  icon: string;
+  icon: IconName;
 }> = [
-  { key: "allow_friend_requests", title: "Demandes d’ami", description: "Autorise les joueurs à t’envoyer une demande depuis ton profil.", icon: "♢" },
-  { key: "allow_squad_invites", title: "Invitations de squad", description: "Autorise les chefs de squad à t’inviter depuis ton profil.", icon: "◇" },
+  { key: "allow_friend_requests", title: "Demandes d’ami", description: "Autorise les joueurs à t’envoyer une demande depuis ton profil.", icon: "user-plus" },
+  { key: "allow_squad_invites", title: "Invitations de squad", description: "Autorise les chefs de squad à t’inviter depuis ton profil.", icon: "users" },
 ];
 
 export default function ProfilePrivacyPanel() {
@@ -79,6 +83,7 @@ export default function ProfilePrivacyPanel() {
           show_gaming_dna: row.show_gaming_dna ?? true,
           show_looking_for: row.show_looking_for ?? true,
           show_availability: row.show_availability ?? true,
+          show_last_seen: row.show_last_seen ?? true,
           allow_friend_requests: row.allow_friend_requests ?? true,
           allow_squad_invites: row.allow_squad_invites ?? true,
         });
@@ -102,7 +107,7 @@ export default function ProfilePrivacyPanel() {
     setFeedback("");
     setError("");
 
-    const { error: saveError } = await supabase.rpc("update_my_profile_privacy_v2", {
+    const { error: saveError } = await supabase.rpc("update_my_profile_privacy_v15", {
       p_show_bio: settings.show_bio,
       p_show_region: settings.show_region,
       p_show_language: settings.show_language,
@@ -110,6 +115,7 @@ export default function ProfilePrivacyPanel() {
       p_show_gaming_dna: settings.show_gaming_dna,
       p_show_looking_for: settings.show_looking_for,
       p_show_availability: settings.show_availability,
+      p_show_last_seen: settings.show_last_seen,
       p_allow_friend_requests: settings.allow_friend_requests,
       p_allow_squad_invites: settings.allow_squad_invites,
     });
@@ -137,7 +143,7 @@ export default function ProfilePrivacyPanel() {
             puisse être identifié. Toutes les informations ci-dessous sont réglables.
           </p>
         </div>
-        <div className="privacy6-shield"><span>◈</span><strong>Contrôle total</strong><small>Réglages appliqués côté serveur</small></div>
+        <div className="privacy6-shield"><span><Icon name="shield" /></span><strong>Contrôle total</strong><small>Réglages appliqués côté serveur</small></div>
       </section>
 
       {(feedback || error) && (
@@ -178,7 +184,7 @@ export default function ProfilePrivacyPanel() {
             ))}
           </div>
           <div className="privacy6-info">
-            <span>i</span>
+            <span><Icon name="info" size={16} /></span>
             <p>Le blocage d’un joueur reste prioritaire sur ces réglages. Un joueur bloqué ne peut jamais t’envoyer d’action sociale.</p>
           </div>
         </section>
@@ -201,7 +207,7 @@ function PrivacyRow({
   enabled,
   onToggle,
 }: {
-  icon: string;
+  icon: IconName;
   title: string;
   description: string;
   enabled: boolean;
@@ -209,7 +215,7 @@ function PrivacyRow({
 }) {
   return (
     <button type="button" className={`privacy6-row ${enabled ? "enabled" : ""}`} onClick={onToggle} aria-pressed={enabled}>
-      <span className="privacy6-icon">{icon}</span>
+      <span className="privacy6-icon"><Icon name={icon} /></span>
       <span className="privacy6-row-copy"><strong>{title}</strong><small>{description}</small></span>
       <span className="privacy6-state">{enabled ? "Visible" : "Masqué"}</span>
       <span className="privacy6-switch"><i /></span>

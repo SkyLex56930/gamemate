@@ -124,11 +124,15 @@ export default function HomePage() {
 
   useEffect(() => {
     const saved = window.localStorage.getItem("gamemate-site-language");
-    if (saved === "fr" || saved === "en") {
-      setLang(saved);
-      return;
-    }
-    setLang(navigator.language.toLowerCase().startsWith("fr") ? "fr" : "en");
+    const preferredLanguage =
+      saved === "fr" || saved === "en"
+        ? saved
+        : navigator.language.toLowerCase().startsWith("fr")
+          ? "fr"
+          : "en";
+
+    const updateLanguage = window.setTimeout(() => setLang(preferredLanguage), 0);
+    return () => window.clearTimeout(updateLanguage);
   }, []);
 
   useEffect(() => {

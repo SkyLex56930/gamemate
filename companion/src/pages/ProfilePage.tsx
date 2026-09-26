@@ -3,6 +3,7 @@ import type { Session } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase";
 import { getProfileCompletion, type ProfileCompletionTask } from "../lib/profileCompletion";
 import ProfilePrivacyPanel from "../components/ProfilePrivacyPanel";
+import { Icon, type IconName } from "../components/Icon";
 import "./ProfilePage.css";
 
 type Profile = {
@@ -632,9 +633,9 @@ export default function ProfilePage({
           <small>{completion.completed} / {completion.total} ÉTAPES</small>
           {completion.nextTask ? (
             <button type="button" onClick={() => openSetup(completion.nextTask!.section)}>
-              <span>Prochaine étape</span><strong>{completion.nextTask.label}</strong><b>→</b>
+              <span>Prochaine étape</span><strong>{completion.nextTask.label}</strong><Icon name="arrow-right" size={16} />
             </button>
-          ) : <span className="prc-complete-badge">✓ Profil complet</span>}
+          ) : <span className="prc-complete-badge"><Icon name="check" size={15} /> Profil complet</span>}
         </div>
       </section>
 
@@ -955,11 +956,11 @@ function ProfileSetup({
 }) {
   const [newGameId, setNewGameId] = useState("");
   const [newPlatformId, setNewPlatformId] = useState("");
-  const groups: Array<{ id: SetupSection; label: string; icon: string; subtitle: string }> = [
-    { id: "identity", label: "Identité", icon: "◌", subtitle: "Pseudo, bio et localisation" },
-    { id: "games", label: "Jeux", icon: "▶", subtitle: "Rang, rôle et plateforme" },
-    { id: "preferences", label: "Style de jeu", icon: "✦", subtitle: "Gaming DNA et intentions" },
-    { id: "availability", label: "Disponibilités", icon: "◷", subtitle: "Jours et horaires" },
+  const groups: Array<{ id: SetupSection; label: string; icon: IconName; subtitle: string }> = [
+    { id: "identity", label: "Identité", icon: "user", subtitle: "Pseudo, bio et localisation" },
+    { id: "games", label: "Jeux", icon: "gamepad", subtitle: "Rang, rôle et plateforme" },
+    { id: "preferences", label: "Style de jeu", icon: "sparkles", subtitle: "Gaming DNA et intentions" },
+    { id: "availability", label: "Disponibilités", icon: "calendar-clock", subtitle: "Jours et horaires" },
   ];
 
   const isGroupDone = (id: SetupSection) =>
@@ -1040,12 +1041,12 @@ function ProfileSetup({
         </div>
         {groups.map((group) => (
           <button type="button" key={group.id} className={section === group.id ? "active" : ""} onClick={() => onSectionChange(group.id)}>
-            <span>{group.icon}</span>
+            <span><Icon name={group.icon} /></span>
             <span><strong>{group.label}</strong><small>{group.subtitle}</small></span>
-            <i className={isGroupDone(group.id) ? "done" : ""}>{isGroupDone(group.id) ? "✓" : "›"}</i>
+            <i className={isGroupDone(group.id) ? "done" : ""}><Icon name={isGroupDone(group.id) ? "check" : "chevron-right"} size={15} /></i>
           </button>
         ))}
-        <div className="prc-setup-hint"><span>✦</span><p>Les champs privés ne sont jamais affichés sur ton profil public sans raison.</p></div>
+        <div className="prc-setup-hint"><span><Icon name="shield" /></span><p>Les champs privés ne sont jamais affichés sur ton profil public sans raison.</p></div>
       </aside>
 
       <main className="prc-setup-main">
@@ -1088,7 +1089,7 @@ function ProfileSetup({
                 <option value="">Choisir une plateforme</option>
                 {platformCatalog.map((platform) => <option key={platform.id} value={platform.id}>{platform.name}</option>)}
               </select>
-              <button type="button" disabled={!newGameId || !newPlatformId} onClick={addGame}>＋ Ajouter</button>
+              <button type="button" disabled={!newGameId || !newPlatformId} onClick={addGame}><Icon name="plus" size={16} /> Ajouter</button>
             </div>
             {gameDrafts.length ? <div className="prc-game-edit-list">{gameDrafts.map((game, index) => (
               <article key={`${game.game_id}-${game.platform_id ?? "none"}`} className={game.draftPrimary ? "primary" : ""}>
@@ -1105,7 +1106,7 @@ function ProfileSetup({
                   <MiniToggle label="J'accepte le crossplay" checked={game.draftCrossplay} onChange={(value) => updateGame(index, { draftCrossplay: value })} />
                 </div>
               </article>
-            ))}</div> : <div className="prc-editor-empty"><span>＋</span><h3>Aucun jeu configuré</h3><p>Ajoute d'abord un jeu depuis le portail GameMate, puis reviens préciser ton rang et ton rôle ici.</p></div>}
+            ))}</div> : <div className="prc-editor-empty"><span><Icon name="plus" /></span><h3>Aucun jeu configuré</h3><p>Ajoute d'abord un jeu depuis le portail GameMate, puis reviens préciser ton rang et ton rôle ici.</p></div>}
             {gameDrafts.length > 0 && <EditorSave saving={saving} onSave={onSaveGames} />}
           </section>
         )}
@@ -1115,10 +1116,10 @@ function ProfileSetup({
             <EditorHeader step="03" title="Ton style de jeu" description="Décris l'ambiance que tu apprécies. GameMate n'affiche pas un faux score : ces informations servent de vrais signaux." />
             <div className="prc-choice-head"><div><span className="prc-eyebrow">GAMING DNA</span><h3>Comment tu joues</h3></div><b>{selectedDnaIds.length} / 8</b></div>
             <div className="prc-chip-grid">{dnaOptions.map((tag) => <button type="button" key={tag.id} className={selectedDnaIds.includes(tag.id) ? "active" : ""} onClick={() => toggleDna(tag.id)}>
-              <span>{selectedDnaIds.includes(tag.id) ? "✓" : "+"}</span><strong>{tag.name}</strong><small>{tag.category}</small></button>)}</div>
+              <span><Icon name={selectedDnaIds.includes(tag.id) ? "check" : "plus"} size={14} /></span><strong>{tag.name}</strong><small>{tag.category}</small></button>)}</div>
             <div className="prc-choice-head spaced"><div><span className="prc-eyebrow">INTENTIONS</span><h3>Ce que tu recherches</h3></div><b>{selectedLookingIds.length}</b></div>
             <div className="prc-looking-grid">{lookingOptions.map((option) => <button type="button" key={option.id} className={selectedLookingIds.includes(option.id) ? "active" : ""} onClick={() => toggleLooking(option.id)}>
-              <span>{selectedLookingIds.includes(option.id) ? "✓" : "◇"}</span>{option.label}</button>)}</div>
+              <span><Icon name={selectedLookingIds.includes(option.id) ? "check" : "target"} size={14} /></span>{option.label}</button>)}</div>
             <EditorSave saving={saving} onSave={onSavePreferences} />
           </section>
         )}
@@ -1132,7 +1133,7 @@ function ProfileSetup({
               <Field label="Fin"><input type="time" value={availabilityDraft.end} onChange={(event) => onAvailabilityDraftChange({ ...availabilityDraft, end: event.target.value })} /></Field>
               <Field label="Fuseau horaire"><input value={availabilityDraft.timezone} onChange={(event) => onAvailabilityDraftChange({ ...availabilityDraft, timezone: event.target.value })} /></Field>
             </div>
-            <div className="prc-availability-preview"><span>◷</span><div><small>APERÇU</small><strong>{availabilityDraft.days.length ? availabilityDraft.days.map((day) => days[day]).join(" · ") : "Aucun jour"}</strong>
+            <div className="prc-availability-preview"><span><Icon name="clock" /></span><div><small>APERÇU</small><strong>{availabilityDraft.days.length ? availabilityDraft.days.map((day) => days[day]).join(" · ") : "Aucun jour"}</strong>
               <p>{availabilityDraft.start} – {availabilityDraft.end} · {availabilityDraft.timezone}</p></div></div>
             <EditorSave saving={saving} onSave={onSaveAvailability} />
           </section>

@@ -8,6 +8,7 @@ import {
   supportsAudioOutputSelection,
   type AudioDevicePreferences,
 } from "../lib/mediaDevices";
+import { Icon } from "./Icon";
 
 type Props = {
   onNotice: (message: string) => void;
@@ -166,7 +167,7 @@ export default function AudioDeviceSettings({ onNotice }: Props) {
   if (!mediaAvailable) {
     return (
       <div className="audio-device-unavailable">
-        <span>!</span>
+        <span><Icon name="alert-circle" /></span>
         <div><strong>API audio indisponible</strong><small>Cette version du WebView Windows ne permet pas encore de gérer les périphériques.</small></div>
       </div>
     );
@@ -191,7 +192,7 @@ export default function AudioDeviceSettings({ onNotice }: Props) {
         </div>
       </div>
 
-      {error && <div className="audio-device-error"><span>!</span>{error}</div>}
+      {error && <div className="audio-device-error"><span><Icon name="alert-circle" size={16} /></span>{error}</div>}
 
       <div className="audio-device-grid">
         <section className="audio-device-card">
@@ -213,7 +214,7 @@ export default function AudioDeviceSettings({ onNotice }: Props) {
           </div>
 
           <button type="button" className={`audio-test-button ${micTesting ? "stop" : ""}`} onClick={() => micTesting ? stopMicTest() : void startMicTest()}>
-            <span>{micTesting ? "■" : "●"}</span>{micTesting ? "Arrêter le test" : "Tester le microphone"}
+            <span><Icon name={micTesting ? "close" : "mic"} size={16} /></span>{micTesting ? "Arrêter le test" : "Tester le microphone"}
           </button>
         </section>
 
@@ -234,12 +235,12 @@ export default function AudioDeviceSettings({ onNotice }: Props) {
           </label>
 
           <div className="audio-output-note">
-            <span>{outputSelectionAvailable ? "✓" : "i"}</span>
+            <span><Icon name={outputSelectionAvailable ? "check" : "info"} size={16} /></span>
             <p>{outputSelectionAvailable ? "Les sons GameMate utilisent immédiatement cette sortie." : "Le WebView utilise la sortie Windows par défaut sur cet appareil."}</p>
           </div>
 
           <button type="button" className="audio-test-button" onClick={() => void testSpeaker()}>
-            <span>▶</span>Tester la sortie
+            <span><Icon name="play" size={16} /></span>Tester la sortie
           </button>
         </section>
       </div>

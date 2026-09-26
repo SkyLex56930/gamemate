@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabase";
 import SessionAfterGameHub from "./SessionAfterGameHub";
+import { Icon } from "./Icon";
 
 type Game = {
   id: number;
@@ -453,7 +454,7 @@ export default function SquadGameSession({
                   disabled={Boolean(working)}
                   onClick={() => void updatePresence("ready")}
                 >
-                  <span>✓</span><strong>Prêt</strong><small>Je rejoins la partie</small>
+                  <span><Icon name="check" /></span><strong>Prêt</strong><small>Je rejoins la partie</small>
                 </button>
                 <button
                   type="button"
@@ -461,7 +462,7 @@ export default function SquadGameSession({
                   disabled={Boolean(working)}
                   onClick={() => void updatePresence("not_ready")}
                 >
-                  <span>…</span><strong>Pas prêt</strong><small>J’ai besoin d’un moment</small>
+                  <span><Icon name="clock" /></span><strong>Pas prêt</strong><small>J’ai besoin d’un moment</small>
                 </button>
                 <button
                   type="button"
@@ -469,7 +470,7 @@ export default function SquadGameSession({
                   disabled={Boolean(working)}
                   onClick={() => void updatePresence("away")}
                 >
-                  <span>×</span><strong>Absent</strong><small>Ne m’attendez pas</small>
+                  <span><Icon name="user-x" /></span><strong>Absent</strong><small>Ne m’attendez pas</small>
                 </button>
               </div>
           </>

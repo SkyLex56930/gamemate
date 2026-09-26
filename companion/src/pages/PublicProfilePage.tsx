@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { supabase } from "../lib/supabase";
+import { Icon } from "../components/Icon";
+import { lastSeenLabel, presenceActivity, presenceLabel, type PresenceSnapshot } from "../lib/presence";
 import "./PublicProfilePage.css";
 
 type Props = {
@@ -94,6 +96,7 @@ export default function PublicProfilePage({
   onOpenOwnProfile,
 }: Props) {
   const [data, setData] = useState<PublicPlayerData | null>(null);
+  const [presence, setPresence] = useState<PresenceSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -109,10 +112,12 @@ export default function PublicProfilePage({
     if (!silent) setLoading(true);
     setError("");
 
-    const { data: result, error: loadError } = await supabase.rpc(
-      "get_public_player_profile",
-      { p_user_id: userId }
-    );
+    const [profileResult, presenceResult] = await Promise.all([
+      supabase.rpc("get_public_player_profile", { p_user_id: userId }),
+      supabase.rpc("get_presence_v15", { p_user_ids: [userId] }),
+    ]);
+    const result = profileResult.data;
+    const loadError = profileResult.error;
 
     if (loadError || !result) {
       console.error("Public profile:", loadError);
@@ -122,6 +127,7 @@ export default function PublicProfilePage({
     }
 
     setData(result as PublicPlayerData);
+    setPresence(((presenceResult.data ?? []) as PresenceSnapshot[])[0] ?? null);
     setLoading(false);
   }, [userId]);
 
@@ -134,6 +140,7 @@ export default function PublicProfilePage({
       .on("postgres_changes", { event: "*", schema: "public", table: "friendships" }, () => void loadProfile(true))
       .on("postgres_changes", { event: "*", schema: "public", table: "user_blocks" }, () => void loadProfile(true))
       .on("postgres_changes", { event: "*", schema: "public", table: "squad_invites" }, () => void loadProfile(true))
+      .on("postgres_changes", { event: "*", schema: "public", table: "user_presence" }, () => void loadProfile(true))
       .subscribe();
 
     return () => {
@@ -298,9 +305,16 @@ export default function PublicProfilePage({
             <p className="pub6-handle">
               {profile.username ? `@${profile.username}` : "Compte GameMate"}
             </p>
+            {presence && (
+              <div className={`pub6-presence ${presence.status}`}>
+                <i />
+                <strong>{presenceLabel(presence.status)}</strong>
+                <span>{presence.status === "offline" ? lastSeenLabel(presence.last_seen_at) : presenceActivity(presence)}</span>
+              </div>
+            )}
             <div className="pub6-meta">
-              {profile.region && <span>⌖ {profile.region}</span>}
-              {profile.language && <span>◈ {profile.language}</span>}
+              {profile.region && <span><Icon name="map-pin" size={13} /> {profile.region}</span>}
+              {profile.language && <span><Icon name="globe" size={13} /> {profile.language}</span>}
               <span>
                 {data.games.length} jeu{data.games.length > 1 ? "x" : ""} public
                 {data.games.length > 1 ? "s" : ""}
@@ -336,7 +350,7 @@ export default function PublicProfilePage({
 
       {social.blocked_by_me ? (
         <section className="pub6-blocked-card">
-          <span>⊘</span>
+          <span><Icon name="ban" size={27} /></span>
           <div>
             <strong>Profil masqué</strong>
             <p>Tu as bloqué ce joueur. Débloque-le pour revoir ses informations et interagir avec lui.</p>
@@ -383,7 +397,7 @@ export default function PublicProfilePage({
                 <div className="pub6-looking-list">
                   {data.looking_for.map((item) => (
                     <div key={item.id}>
-                      <span>✦</span>
+                      <span><Icon name="sparkles" /></span>
                       <div>
                         <strong>{item.label}</strong>
                         {item.description && <small>{item.description}</small>}
@@ -400,7 +414,7 @@ export default function PublicProfilePage({
               <section className="pub6-card pub6-squad-card">
                 <CardHeader eyebrow="SQUAD" title="Jouer ensemble" />
                 {social.target_in_squad ? (
-                  <p className="pub6-status-ok">✓ Ce joueur est déjà dans ta squad.</p>
+                  <p className="pub6-status-ok"><Icon name="check" size={15} /> Ce joueur est déjà dans ta squad.</p>
                 ) : social.squad_invite_pending ? (
                   <p>Invitation déjà envoyée et en attente.</p>
                 ) : social.can_invite ? (
@@ -410,14 +424,14 @@ export default function PublicProfilePage({
                 ) : social.viewer_squad_id && !social.viewer_is_squad_owner ? (
                   <>
                     <p>Seul le chef de ta squad peut envoyer cette invitation.</p>
-                    <button type="button" className="pub6-link-button" onClick={onOpenSquads}>Ouvrir ma squad →</button>
+                    <button type="button" className="pub6-link-button" onClick={onOpenSquads}>Ouvrir ma squad <Icon name="arrow-right" size={14} /></button>
                   </>
                 ) : social.viewer_squad_id ? (
                   <p>Ce joueur n’accepte pas les invitations de squad.</p>
                 ) : (
                   <>
                     <p>Crée d’abord une squad pour inviter ce joueur.</p>
-                    <button type="button" className="pub6-link-button" onClick={onOpenSquads}>Créer une squad →</button>
+                    <button type="button" className="pub6-link-button" onClick={onOpenSquads}>Créer une squad <Icon name="arrow-right" size={14} /></button>
                   </>
                 )}
               </section>
@@ -524,7 +538,7 @@ function SocialActions({
   }
   return (
     <button type="button" className="pub6-action primary" disabled={busy === "friend"} onClick={onSendFriend}>
-      {busy === "friend" ? "Envoi…" : "+ Ajouter en ami"}
+      {busy === "friend" ? "Envoi…" : <><Icon name="user-plus" size={15} /> Ajouter en ami</>}
     </button>
   );
 }
@@ -553,8 +567,8 @@ function GameCard({ game }: { game: PlayerGame }) {
           {game.mode && <Stat label="Mode" value={game.mode} />}
         </div>
         <div className="pub6-game-flags">
-          {game.mic_enabled && <span>● Micro</span>}
-          {game.crossplay_enabled && <span>↔ Crossplay</span>}
+          {game.mic_enabled && <span><Icon name="mic" size={13} /> Micro</span>}
+          {game.crossplay_enabled && <span><Icon name="link" size={13} /> Crossplay</span>}
         </div>
       </div>
     </article>
@@ -575,7 +589,7 @@ function CardHeader({ eyebrow, title, count }: { eyebrow: string; title: string;
 }
 
 function EmptyState({ text, compact = false }: { text: string; compact?: boolean }) {
-  return <div className={`pub6-empty ${compact ? "compact" : ""}`}><span>◇</span><p>{text}</p></div>;
+  return <div className={`pub6-empty ${compact ? "compact" : ""}`}><span><Icon name="layout-grid" size={24} /></span><p>{text}</p></div>;
 }
 
 function Modal({ title, eyebrow, onClose, children }: {
@@ -589,7 +603,7 @@ function Modal({ title, eyebrow, onClose, children }: {
       <section className="pub6-modal" onMouseDown={(event) => event.stopPropagation()}>
         <header>
           <div><span className="pub6-eyebrow">{eyebrow}</span><h2>{title}</h2></div>
-          <button type="button" onClick={onClose} aria-label="Fermer">×</button>
+          <button type="button" onClick={onClose} aria-label="Fermer"><Icon name="close" size={17} /></button>
         </header>
         {children}
       </section>

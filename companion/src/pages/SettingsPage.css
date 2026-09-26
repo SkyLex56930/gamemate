@@ -49,3 +49,18 @@
 @media(max-width:1100px){.settings-health-grid{grid-template-columns:repeat(2,1fr)}.settings-workspace{grid-template-columns:210px minmax(0,1fr)}.settings-choice-grid,.settings-accent-grid{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:760px){.settings-page{padding-bottom:25px}.settings-command-head{min-height:220px;align-items:flex-start;flex-direction:column;padding:25px}.settings-head-status{width:100%;align-items:flex-start}.settings-health-grid{grid-template-columns:1fr 1fr}.settings-workspace{grid-template-columns:1fr}.settings-nav{position:static;display:grid;grid-template-columns:repeat(2,1fr)}.settings-nav-title{grid-column:1/-1}.settings-nav>button{min-height:52px}.settings-panel>header,.settings-panel-body{padding-left:15px;padding-right:15px}.settings-presence-grid,.settings-action-grid,.audio-device-grid{grid-template-columns:1fr}.audio-processing>div{grid-template-columns:1fr}.audio-processing-toggle{border-right:0;border-bottom:1px solid rgba(93,119,156,.14)}.audio-processing-toggle:last-child{border-bottom:0}.audio-device-statusbar{align-items:flex-start;flex-direction:column}.audio-device-statusbar>div:last-child{width:100%;flex-wrap:wrap}.settings-range{grid-template-columns:1fr 45px;gap:8px}.settings-range>span{grid-column:1/-1}.settings-account-card{grid-template-columns:44px 1fr}.settings-account-card>button{grid-column:1/-1}.settings-health{padding:11px}.settings-health>span{display:none}}
 @media(max-width:480px){.settings-health-grid,.settings-choice-grid,.settings-accent-grid,.settings-nav{grid-template-columns:1fr}.settings-nav-title{grid-column:auto}.settings-command-head h1{font-size:32px}}
+
+/* V15 — présence sociale enrichie */
+.settings-presence-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
+.settings-presence-grid i.away{background:#f2b94e;box-shadow:0 0 12px rgba(242,185,78,.65)}
+.settings-presence-grid i.dnd{background:#ff526c;box-shadow:0 0 12px rgba(255,82,108,.65)}
+.settings-presence-grid i.invisible{background:#68758a}
+.settings-presence-profile{display:grid;grid-template-columns:1.25fr .85fr 1fr auto;align-items:end;gap:10px;margin-top:14px;border-top:1px solid rgba(91,117,152,.16);padding-top:14px}
+.settings-presence-profile label{display:flex;min-width:0;flex-direction:column;gap:6px}
+.settings-presence-profile label>span{color:#8fa1b9;font-size:8px;font-weight:900;letter-spacing:.04em}
+.settings-presence-profile input,.settings-presence-profile select{width:100%;height:39px;border:1px solid rgba(91,117,152,.25);border-radius:9px;outline:none;padding:0 11px;background:#061528;color:#e5ebf5;font:inherit;font-size:9px}
+.settings-presence-profile input:focus,.settings-presence-profile select:focus{border-color:rgba(var(--accent-rgb),.65);box-shadow:0 0 0 3px rgba(var(--accent-rgb),.09)}
+.settings-presence-profile label>small{height:8px;color:#5f738f;font-size:7px;text-align:right}
+.settings-presence-profile>button{min-height:39px;margin-bottom:14px;white-space:nowrap}
+@media(max-width:1050px){.settings-presence-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.settings-presence-profile{grid-template-columns:1fr 1fr}.settings-presence-profile>button{margin-bottom:0}}
+@media(max-width:760px){.settings-presence-grid,.settings-presence-profile{grid-template-columns:1fr}}

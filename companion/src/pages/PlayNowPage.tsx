@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase";
+import { Icon, type IconName } from "../components/Icon";
 import "./PlayNowPage.css";
 
 type UserGame = {
@@ -161,7 +162,7 @@ export default function PlayNowPage({
   if (!session) {
     return (
       <section className="pnx-locked">
-        <span>▶</span><div><small>PLAY NOW</small><h1>Lance ta prochaine session.</h1>
+        <span><Icon name="play" size={28} /></span><div><small>PLAY NOW</small><h1>Lance ta prochaine session.</h1>
           <p>Connecte-toi pour préparer une recherche avec tes vrais jeux et préférences.</p>
           <button type="button" onClick={onLogin}>Se connecter</button></div>
       </section>
@@ -187,8 +188,8 @@ export default function PlayNowPage({
 
       {profileCompletion < 70 && (
         <button type="button" className="pnx-profile-tip" onClick={onOpenSettings}>
-          <span>✦</span><span><strong>Ton profil est complété à {profileCompletion}%</strong>
-            <small>Ajoute ton rang, ton rôle et ton Gaming DNA pour des recherches plus précises.</small></span><b>Compléter →</b>
+          <span><Icon name="sparkles" /></span><span><strong>Ton profil est complété à {profileCompletion}%</strong>
+            <small>Ajoute ton rang, ton rôle et ton Gaming DNA pour des recherches plus précises.</small></span><b>Compléter <Icon name="arrow-right" size={14} /></b>
         </button>
       )}
 
@@ -201,10 +202,10 @@ export default function PlayNowPage({
               className={game.game_id === selectedGame?.game_id ? "active" : ""} onClick={() => changeGame(game.game_id)}>
               <span className={`pnx-game-cover tone-${index % 4}`}><b>{game.gameName.slice(0, 2).toUpperCase()}</b>{game.is_primary && <i>PRINCIPAL</i>}</span>
               <span><strong>{game.gameName}</strong><small>{game.platformName ?? "Plateforme inconnue"}</small></span>
-              <em>{game.game_id === selectedGame?.game_id ? "✓" : ""}</em>
+              <em>{game.game_id === selectedGame?.game_id ? <Icon name="check" size={15} /> : null}</em>
             </button>
           ))}
-          {userGames.length === 0 && <button className="pnx-add-game" type="button" onClick={onOpenSettings}>＋<span><strong>Ajouter un jeu</strong><small>Configure ton profil</small></span></button>}
+          {userGames.length === 0 && <button className="pnx-add-game" type="button" onClick={onOpenSettings}><Icon name="plus" /><span><strong>Ajouter un jeu</strong><small>Configure ton profil</small></span></button>}
         </div>
       </section>
 
@@ -213,7 +214,7 @@ export default function PlayNowPage({
           <header><div><span className="pnx-number">02</span><div><small>TYPE DE SESSION</small><h2>Quelle ambiance ?</h2></div></div></header>
           <div className="pnx-intents">
             {lookingFor.map((option) => <button type="button" key={option.id} className={intentId === option.id ? "active" : ""}
-              onClick={() => setIntentId(option.id)}><span>{intentIcon(option.slug)}</span>{option.label}</button>)}
+              onClick={() => setIntentId(option.id)}><span><Icon name={intentIcon(option.slug)} /></span>{option.label}</button>)}
             {lookingFor.length === 0 && <p className="pnx-inline-empty">Ajoute ce que tu recherches depuis ton profil.</p>}
           </div>
           <div className="pnx-party-size"><span><strong>Taille du groupe</strong><small>Nombre total de joueurs souhaité</small></span>
@@ -224,7 +225,7 @@ export default function PlayNowPage({
           <header><div><span className="pnx-number">03</span><div><small>PRÉCISION</small><h2>Comment chercher ?</h2></div></div></header>
           <div className="pnx-modes">
             {searchModes.map((mode) => <button type="button" key={mode.id} className={searchMode === mode.id ? "active" : ""} onClick={() => setSearchMode(mode.id)}>
-              <span><strong>{mode.title}</strong><small>{mode.time}</small></span><p>{mode.description}</p><i>{searchMode === mode.id ? "✓" : ""}</i></button>)}
+              <span><strong>{mode.title}</strong><small>{mode.time}</small></span><p>{mode.description}</p><i>{searchMode === mode.id ? <Icon name="check" size={15} /> : null}</i></button>)}
           </div>
         </section>
       </div>
@@ -239,7 +240,7 @@ export default function PlayNowPage({
           <Toggle label="Micro requis" checked={micRequired} onChange={setMicRequired} />
           <Toggle label="Crossplay" checked={crossplay} onChange={setCrossplay} />
         </div>
-        <button className="pnx-launch-button" type="button" disabled={!selectedGame} onClick={() => void startSearch()}><span>▶</span><span><strong>Lancer la recherche</strong><small>Profils GameMate réels</small></span><b>→</b></button>
+        <button className="pnx-launch-button" type="button" disabled={!selectedGame} onClick={() => void startSearch()}><span><Icon name="play" /></span><span><strong>Lancer la recherche</strong><small>Profils GameMate réels</small></span><Icon name="arrow-right" /></button>
       </section>
       {status === "error" && error && <div className="pnx-error">{error}</div>}
     </div>
@@ -263,12 +264,12 @@ function ResultsView({ game, results, onRetry, onEdit, onOpenProfile }: {
   return <div className="pnx pnx-result-page"><header className="pnx-result-head"><div><span className="pnx-eyebrow">PLAY NOW · RÉSULTATS</span>
     <h1>{results.length ? `${results.length} mate${results.length > 1 ? "s" : ""} à découvrir` : "Aucun mate pour le moment"}</h1>
     <p>{game?.gameName ?? "Recherche GameMate"}</p></div><div><button type="button" onClick={onEdit}>Modifier</button><button type="button" className="primary" onClick={onRetry}>Relancer</button></div></header>
-    {results.length === 0 ? <section className="pnx-no-results"><span>⌁</span><h2>Élargis légèrement la recherche.</h2><p>Passe en mode Rapide ou active le crossplay pour afficher davantage de profils.</p><button type="button" onClick={onEdit}>Modifier les paramètres</button></section> :
+    {results.length === 0 ? <section className="pnx-no-results"><span><Icon name="search" size={28} /></span><h2>Élargis légèrement la recherche.</h2><p>Passe en mode Rapide ou active le crossplay pour afficher davantage de profils.</p><button type="button" onClick={onEdit}>Modifier les paramètres</button></section> :
       <div className="pnx-result-grid">{results.map((mate) => { const name = mate.display_name || mate.username || "Joueur GameMate"; const reasons = buildReasons(mate, game);
         return <article key={mate.user_id}><div className="pnx-result-top"><span className="pnx-result-avatar">{mate.avatar_url ? <img src={mate.avatar_url} alt={name} /> : name.slice(0,1).toUpperCase()}</span>
           <div><strong>{name}</strong><small>{[mate.platform_name,mate.rank_text].filter(Boolean).join(" · ") || "Profil GameMate"}</small></div></div>
-          <p>{mate.bio || "Aucune présentation pour le moment."}</p><div className="pnx-result-reasons">{reasons.map((reason) => <span key={reason}>✓ {reason}</span>)}</div>
-          {onOpenProfile && <button type="button" onClick={() => onOpenProfile(mate.user_id)}>Voir le profil <b>→</b></button>}</article>; })}</div>}
+          <p>{mate.bio || "Aucune présentation pour le moment."}</p><div className="pnx-result-reasons">{reasons.map((reason) => <span key={reason}><Icon name="check" size={12} /> {reason}</span>)}</div>
+          {onOpenProfile && <button type="button" onClick={() => onOpenProfile(mate.user_id)}>Voir le profil <Icon name="arrow-right" size={14} /></button>}</article>; })}</div>}
   </div>;
 }
 
@@ -288,11 +289,11 @@ function buildReasons(candidate: MateResult, game: UserGame | null) {
     candidate.mic_enabled ? "Micro" : null].filter(Boolean) as string[];
 }
 
-function intentIcon(slug: string) {
-  if (slug.includes("rank") || slug.includes("compet")) return "◆";
-  if (slug.includes("friend")) return "♢";
-  if (slug.includes("team") || slug.includes("squad")) return "◇";
-  return "▶";
+function intentIcon(slug: string): IconName {
+  if (slug.includes("rank") || slug.includes("compet")) return "trophy";
+  if (slug.includes("friend")) return "user-plus";
+  if (slug.includes("team") || slug.includes("squad")) return "users";
+  return "play";
 }
 
 function searchModeLabel(mode: SearchMode) {
