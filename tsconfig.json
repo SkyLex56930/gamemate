@@ -31,11 +31,25 @@
     "**/*.mts"
   ],
   "exclude": [
-   "node_modules",
-    "Admin",
+  "node_modules",
+
+  "Admin",
+  "Admin/**/*",
+
   "companion",
   "companion/**/*",
+
   "launcher",
-  "launcher/**/*"
+  "launcher/**/*",
+
+  "src/App.tsx",
+  "src/App.css",
+  "src/CompanionV8.css",
+
+  "src/pages",
+  "src/pages/**/*",
+
+  "src/components",
+  "src/components/**/*"
 ]
 }
