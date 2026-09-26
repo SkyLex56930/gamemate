@@ -33,6 +33,9 @@
   "exclude": [
   "node_modules",
 
+  "_old-companion-src",
+  "_old-companion-src/**/*",
+
   "Admin",
   "Admin/**/*",
 
@@ -40,16 +43,6 @@
   "companion/**/*",
 
   "launcher",
-  "launcher/**/*",
-
-  "src/App.tsx",
-  "src/App.css",
-  "src/CompanionV8.css",
-
-  "src/pages",
-  "src/pages/**/*",
-
-  "src/components",
-  "src/components/**/*"
+  "launcher/**/*"
 ]
 }
