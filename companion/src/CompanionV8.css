@@ -46,6 +46,78 @@
 .gm-shell.reduced-motion *,.gm-shell.reduced-motion *:before,.gm-shell.reduced-motion *:after{scroll-behavior:auto!important;animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}.gm-shell.is-paused *,.gm-shell.is-paused *:before,.gm-shell.is-paused *:after{animation-play-state:paused!important}
 :is(button,a,input,select,textarea):focus-visible{outline:2px solid rgb(var(--accent2-rgb));outline-offset:2px}
 ::selection{background:rgba(var(--accent-rgb),.5);color:#fff}
+/* Fix scrollbar horizontale sidebar */
+.gm-sidebar {
+  overflow-x: hidden !important;
+}
+
+.gm-sidebar,
+.gm-sidebar * {
+  box-sizing: border-box;
+}
+
+.gm-sidebar-bottom {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+.gm-account-card {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.gm-account-card > span:last-child {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.gm-account-card strong,
+.gm-account-card small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 @media(max-width:1120px){.gm-sidebar{width:205px;flex-basis:205px}.gm-content:before{left:205px}.gm-hero h1{font-size:45px}.gm-hero-minimal{padding:30px}.gm-top-profile>span:last-child{display:none}}
 @media(max-width:760px){.gm-sidebar{width:230px;flex-basis:230px}.gm-content:before{display:none}.gm-topbar{padding:8px 10px}.gm-content{padding:12px 10px 25px}.gm-hero-minimal{border-radius:18px;padding:23px}.gm-hero h1{font-size:36px}.gm-icon-btn:nth-of-type(1){display:none}}
+
+/* Correctif définitif : la barre horizontale vient du conteneur de navigation,
+   pas de la sidebar entière. */
+.gm-nav {
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden !important;
+  overflow-y: auto;
+  scrollbar-gutter: auto;
+}
+
+.gm-nav-group,
+.gm-nav-item {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.gm-nav-item {
+  width: 100%;
+}
+
+/* Évite qu'un léger translate au survol crée un overflow horizontal. */
+.gm-nav-item:hover {
+  transform: none !important;
+}
+
+/* Sécurité sur les conteneurs principaux de la sidebar. */
+.gm-sidebar {
+  min-width: 0;
+  overflow-x: hidden !important;
+}
+
+.gm-sidebar-bottom {
+  flex-shrink: 0;
+  min-width: 0;
+}
+

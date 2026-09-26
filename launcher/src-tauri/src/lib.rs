@@ -7,8 +7,9 @@ use std::process::{Command, Stdio};
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
 
-const COMPANION_DOWNLOAD_URL: &str =
-    "https://github.com/SkyLex56930/gamemate-releases/releases/latest/download/GameMate.Companion_x64-setup.exe";
+const RELEASES_API_URL: &str =
+    "https://api.github.com/repos/SkyLex56930/gamemate-releases/releases?per_page=20";
+const COMPANION_ASSET_NAME: &str = "GameMate.Companion_x64-setup.exe";
 
 #[cfg(target_os = "windows")]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
@@ -17,18 +18,21 @@ const CREATE_NO_WINDOW: u32 = 0x08000000;
 struct CompanionStatus {
     installed: bool,
     path: Option<String>,
+    installed_version: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
 struct UpdateStatus {
     latest_version: String,
     update_available: bool,
+    installed_version: Option<String>,
 }
 
 #[derive(Debug, Clone)]
 struct LatestRelease {
     id: u64,
     version: String,
+    download_url: String,
 }
 
 fn possible_install_directories() -> Vec<PathBuf> {
@@ -37,8 +41,9 @@ fn possible_install_directories() -> Vec<PathBuf> {
     if let Some(local_app_data) = env::var_os("LOCALAPPDATA") {
         let local = PathBuf::from(local_app_data);
 
-        dirs.push(local.join("GameMate Companion"));
+        // Tauri/NSIS installe normalement ici en installation par utilisateur.
         dirs.push(local.join("Programs").join("GameMate Companion"));
+        dirs.push(local.join("GameMate Companion"));
         dirs.push(local.join("GameMate").join("Companion"));
     }
 
@@ -77,9 +82,11 @@ fn find_executable_in_directory(directory: &Path) -> Option<PathBuf> {
 }
 
 fn find_companion_executable() -> Option<PathBuf> {
+    let mut candidates: Vec<PathBuf> = Vec::new();
+
     for directory in possible_install_directories() {
         if let Some(path) = find_executable_in_directory(&directory) {
-            return Some(path);
+            candidates.push(path);
         }
 
         if directory.is_dir() {
@@ -88,10 +95,8 @@ fn find_companion_executable() -> Option<PathBuf> {
                     let path = entry.path();
 
                     if path.is_dir() {
-                        if let Some(exe) =
-                            find_executable_in_directory(&path)
-                        {
-                            return Some(exe);
+                        if let Some(exe) = find_executable_in_directory(&path) {
+                            candidates.push(exe);
                         }
                     }
                 }
@@ -99,7 +104,13 @@ fn find_companion_executable() -> Option<PathBuf> {
         }
     }
 
-    None
+    // S'il reste plusieurs anciennes installations du Companion,
+    // on lance l'exécutable installé/modifié le plus récemment.
+    candidates.into_iter().max_by_key(|path| {
+        fs::metadata(path)
+            .and_then(|metadata| metadata.modified())
+            .ok()
+    })
 }
 
 
@@ -128,10 +139,20 @@ fn release_marker_path() -> Result<PathBuf, String> {
     )
 }
 
-fn read_installed_release_id() -> Option<u64> {
+fn read_installed_release_marker() -> Option<(u64, String)> {
     let path = release_marker_path().ok()?;
     let content = fs::read_to_string(path).ok()?;
-    content.lines().next()?.trim().parse::<u64>().ok()
+    let mut lines = content.lines();
+
+    let id = lines.next()?.trim().parse::<u64>().ok()?;
+    let version = lines
+        .next()
+        .unwrap_or("Version inconnue")
+        .trim()
+        .trim_start_matches('v')
+        .to_string();
+
+    Some((id, version))
 }
 
 fn write_installed_release(
@@ -152,16 +173,26 @@ fn write_installed_release(
 
 #[cfg(target_os = "windows")]
 fn latest_release() -> Result<LatestRelease, String> {
-    let script =
+    let api_url = RELEASES_API_URL.replace('\'', "''");
+    let asset_name = COMPANION_ASSET_NAME.replace('\'', "''");
+
+    let script = format!(
         "$ErrorActionPreference='Stop';\
          $ProgressPreference='SilentlyContinue';\
          [Console]::OutputEncoding=[System.Text.Encoding]::UTF8;\
-         $headers=@{'User-Agent'='GameMate-Launcher';'Accept'='application/vnd.github+json'};\
-         $r=Invoke-RestMethod -UseBasicParsing -Headers $headers -Uri 'https://api.github.com/repos/SkyLex56930/gamemate-releases/releases/latest';\
-         $v=[string]$r.tag_name;\
-         if ([string]::IsNullOrWhiteSpace($v) -or $v -eq 'Auto') { $v=[string]$r.name };\
-         if ([string]::IsNullOrWhiteSpace($v)) { $v='Dernière version' };\
-         Write-Output ($r.id.ToString() + [char]9 + $v)";
+         $headers=@{{'User-Agent'='GameMate-Launcher';'Accept'='application/vnd.github+json'}};\
+         $releases=Invoke-RestMethod -UseBasicParsing -Headers $headers -Uri '{}';\
+         $release=$releases | Where-Object {{ -not $_.draft -and -not $_.prerelease -and ($_.assets | Where-Object {{ $_.name -eq '{}' }}) }} | Sort-Object published_at -Descending | Select-Object -First 1;\
+         if (-not $release) {{ throw 'Aucune release publiée contenant GameMate.Companion_x64-setup.exe n’a été trouvée.' }};\
+         $asset=$release.assets | Where-Object {{ $_.name -eq '{}' }} | Select-Object -First 1;\
+         $version=[string]$release.tag_name;\
+         if ([string]::IsNullOrWhiteSpace($version)) {{ $version=[string]$release.name }};\
+         if ([string]::IsNullOrWhiteSpace($version)) {{ $version='Dernière version' }};\
+         Write-Output ($release.id.ToString() + [char]9 + $version + [char]9 + [string]$asset.browser_download_url)",
+        api_url,
+        asset_name,
+        asset_name
+    );
 
     let output = Command::new("powershell.exe")
         .args([
@@ -171,32 +202,29 @@ fn latest_release() -> Result<LatestRelease, String> {
             "-ExecutionPolicy",
             "Bypass",
             "-Command",
-            script,
+            &script,
         ])
         .creation_flags(CREATE_NO_WINDOW)
         .stdin(Stdio::null())
         .stderr(Stdio::piped())
         .output()
         .map_err(|error| {
-            format!(
-                "Impossible de vérifier la dernière release : {error}"
-            )
+            format!("Impossible de vérifier la dernière release : {error}")
         })?;
 
     if !output.status.success() {
-        return Err(
-            "Impossible de contacter le serveur de mises à jour GameMate."
-                .to_string(),
-        );
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!(
+            "Impossible de contacter ou lire les releases GameMate. {}",
+            stderr.trim()
+        ));
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let line = stdout
         .lines()
         .find(|line| !line.trim().is_empty())
-        .ok_or_else(|| {
-            "Aucune information de release reçue.".to_string()
-        })?;
+        .ok_or_else(|| "Aucune information de release reçue.".to_string())?;
 
     let mut parts = line.split('\t');
 
@@ -214,7 +242,17 @@ fn latest_release() -> Result<LatestRelease, String> {
         .trim_start_matches('v')
         .to_string();
 
-    Ok(LatestRelease { id, version })
+    let download_url = parts
+        .next()
+        .ok_or_else(|| "URL de téléchargement manquante.".to_string())?
+        .trim()
+        .to_string();
+
+    Ok(LatestRelease {
+        id,
+        version,
+        download_url,
+    })
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -231,15 +269,19 @@ async fn check_for_updates() -> Result<UpdateStatus, String> {
         let latest = latest_release()?;
         let installed = find_companion_executable().is_some();
 
+        let installed_marker = read_installed_release_marker();
+
         let update_available =
             installed
-                && read_installed_release_id()
-                    .map(|id| id != latest.id)
+                && installed_marker
+                    .as_ref()
+                    .map(|(id, _)| *id != latest.id)
                     .unwrap_or(true);
 
         Ok(UpdateStatus {
             latest_version: latest.version,
             update_available,
+            installed_version: installed_marker.map(|(_, version)| version),
         })
     })
     .await
@@ -255,10 +297,12 @@ fn current_status() -> CompanionStatus {
         Some(path) => CompanionStatus {
             installed: true,
             path: Some(path.to_string_lossy().to_string()),
+            installed_version: read_installed_release_marker().map(|(_, version)| version),
         },
         None => CompanionStatus {
             installed: false,
             path: None,
+            installed_version: None,
         },
     }
 }
@@ -269,13 +313,13 @@ fn companion_status() -> CompanionStatus {
 }
 
 #[cfg(target_os = "windows")]
-fn download_installer(destination: &Path) -> Result<(), String> {
+fn download_installer(download_url: &str, destination: &Path) -> Result<(), String> {
     let destination_string = destination
         .to_str()
         .ok_or_else(|| "Chemin temporaire Windows invalide.".to_string())?
         .replace('\'', "''");
 
-    let download_url = COMPANION_DOWNLOAD_URL.replace('\'', "''");
+    let download_url = download_url.replace('\'', "''");
 
     let script = format!(
         "$ErrorActionPreference='Stop';\
@@ -323,7 +367,7 @@ fn download_installer(destination: &Path) -> Result<(), String> {
 }
 
 #[cfg(not(target_os = "windows"))]
-fn download_installer(_destination: &Path) -> Result<(), String> {
+fn download_installer(_download_url: &str, _destination: &Path) -> Result<(), String> {
     Err("GameMate Launcher prend actuellement en charge l’installation automatique sous Windows uniquement.".to_string())
 }
 
@@ -332,6 +376,8 @@ fn install_companion_sync() -> Result<CompanionStatus, String> {
         return Ok(current_status());
     }
 
+    let release = latest_release()?;
+
     let installer_path =
         env::temp_dir().join("GameMate.Companion_x64-setup.exe");
 
@@ -339,7 +385,7 @@ fn install_companion_sync() -> Result<CompanionStatus, String> {
         let _ = fs::remove_file(&installer_path);
     }
 
-    download_installer(&installer_path)?;
+    download_installer(&release.download_url, &installer_path)?;
 
     // On lance DIRECTEMENT l'installateur EXE.
     // Aucun cmd.exe, aucun npm, aucun dossier de développement.
@@ -377,11 +423,9 @@ fn install_companion_sync() -> Result<CompanionStatus, String> {
         );
     }
 
-    if let Ok(release) = latest_release() {
-        let _ = write_installed_release(&release);
-    }
+    write_installed_release(&release)?;
 
-    Ok(status)
+    Ok(current_status())
 }
 
 #[tauri::command]
@@ -405,6 +449,8 @@ async fn update_companion() -> Result<CompanionStatus, String> {
     tauri::async_runtime::spawn_blocking(|| {
         // Réutilise le même installateur "latest" et l'applique
         // par-dessus la version actuellement installée.
+        let release = latest_release()?;
+
         let installer_path =
             env::temp_dir().join("GameMate.Companion_x64-setup.exe");
 
@@ -412,7 +458,7 @@ async fn update_companion() -> Result<CompanionStatus, String> {
             let _ = fs::remove_file(&installer_path);
         }
 
-        download_installer(&installer_path)?;
+        download_installer(&release.download_url, &installer_path)?;
 
         let mut installer =
             Command::new(&installer_path)
@@ -448,10 +494,9 @@ async fn update_companion() -> Result<CompanionStatus, String> {
             );
         }
 
-        let release = latest_release()?;
         write_installed_release(&release)?;
 
-        Ok(status)
+        Ok(current_status())
     })
     .await
     .map_err(|error| {

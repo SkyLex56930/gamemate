@@ -1,0 +1,30 @@
+{
+  "version": "Companion Cleanup V1",
+  "appliedAt": "2026-09-22T15:45:05.426Z",
+  "changed": [
+    "src/App.tsx",
+    "src-tauri/src/lib.rs",
+    "src-tauri/Cargo.toml",
+    "src/components/SquadVoiceRoom.tsx",
+    "src/pages/MessagesPage.tsx",
+    "src/pages/FriendsPage.tsx",
+    "src/pages/SquadsPage.tsx",
+    "src/pages/ProfilePage.tsx",
+    "src/pages/SupportPage.tsx",
+    "src/pages/FindMatesPage.tsx",
+    "src/pages/FriendsPage.css",
+    "src/pages/MessagesPage.css",
+    "src/pages/SquadsPage.css",
+    "src/pages/ProfilePage.css",
+    "src/pages/SupportPage.css",
+    "src/pages/FindMatesPage.css"
+  ],
+  "removed": [
+    "src/pages/OverlayPage.tsx",
+    "src/pages/OverlayPage.css",
+    "src-tauri/src/overlay_hotkey.rs",
+    "src-tauri/capabilities/overlay.json"
+  ],
+  "skipped": [],
+  "backup": ".companion-cleanup-v1-backup\\2026-09-22T15-45-05-281Z"
+}

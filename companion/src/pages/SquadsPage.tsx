@@ -2,11 +2,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase";
 import { playMessageSendSound } from "../lib/audio";
+import SquadGameSession from "../components/SquadGameSession";
+import SquadVoiceRoom from "../components/SquadVoiceRoom";
 import "./SquadsPage.css";
 
 type Props = {
   session: Session | null;
   onLogin: () => void;
+  onOpenFriends: () => void;
+  onOpenMessages: (userId: string) => void;
+  onOpenProfile: (userId: string) => void;
 };
 
 type Game = {
@@ -100,7 +105,18 @@ type Friendship = {
   status: string;
 };
 
-type Tab = "overview" | "members" | "chat" | "invite" | "settings";
+type Tab = "overview" | "session" | "members" | "chat" | "invite" | "settings";
+
+const SQUAD_TAB_REQUEST_KEY = "gamemate-open-squad-tab";
+
+function readInitialSquadTab(): Tab {
+  const requested = sessionStorage.getItem(SQUAD_TAB_REQUEST_KEY);
+  if (requested === "session") {
+    sessionStorage.removeItem(SQUAD_TAB_REQUEST_KEY);
+    return "session";
+  }
+  return "overview";
+}
 
 const EMPTY_STATE: SquadState = {
   active_squad: null,
@@ -108,11 +124,17 @@ const EMPTY_STATE: SquadState = {
   outgoing_invites: [],
 };
 
-export default function SquadsPage({ session, onLogin }: Props) {
+export default function SquadsPage({
+  session,
+  onLogin,
+  onOpenFriends,
+  onOpenMessages,
+  onOpenProfile,
+}: Props) {
   const [state, setState] = useState<SquadState>(EMPTY_STATE);
   const [games, setGames] = useState<Game[]>([]);
   const [friends, setFriends] = useState<FriendProfile[]>([]);
-  const [tab, setTab] = useState<Tab>("overview");
+  const [tab, setTab] = useState<Tab>(readInitialSquadTab);
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState<string | null>(null);
   const [error, setError] = useState("");
@@ -228,6 +250,19 @@ export default function SquadsPage({ session, onLogin }: Props) {
   useEffect(() => {
     void loadState();
   }, [loadState]);
+
+  useEffect(() => {
+    function openRequestedTab(event: Event) {
+      const requested = (event as CustomEvent<string>).detail;
+      if (requested === "session") {
+        sessionStorage.removeItem(SQUAD_TAB_REQUEST_KEY);
+        setTab("session");
+      }
+    }
+
+    window.addEventListener("gamemate:open-squad-tab", openRequestedTab);
+    return () => window.removeEventListener("gamemate:open-squad-tab", openRequestedTab);
+  }, []);
 
   useEffect(() => {
     if (!userId) return;
@@ -609,7 +644,7 @@ export default function SquadsPage({ session, onLogin }: Props) {
         )}
       </header>
 
-      {error && <div className="team-notice error">{error}</div>}
+      {error && <div className="team-notice error"><span>{error}</span><button type="button" onClick={() => void loadState()}>Réessayer</button></div>}
       {notice && <div className="team-notice">{notice}</div>}
 
       {state.incoming_invites.length > 0 && (
@@ -695,6 +730,7 @@ export default function SquadsPage({ session, onLogin }: Props) {
 
           <nav className="team-tabs">
             <Tab active={tab === "overview"} label="Aperçu" onClick={() => setTab("overview")} />
+            <Tab active={tab === "session"} label="Session de jeu" onClick={() => setTab("session")} />
             <Tab active={tab === "members"} label="Membres" count={squad.members.length} onClick={() => setTab("members")} />
             <Tab active={tab === "chat"} label="Chat" onClick={() => setTab("chat")} />
             {isOwner && (
@@ -720,6 +756,21 @@ export default function SquadsPage({ session, onLogin }: Props) {
               />
             )}
 
+            {tab === "session" && (
+              <SquadGameSession
+                squadId={squad.squad_id}
+                currentUserId={userId!}
+                isOwner={isOwner}
+                members={squad.members}
+                games={games}
+                defaultGameId={squad.game_id}
+                onOpenChat={() => setTab("chat")}
+                onOpenFriends={onOpenFriends}
+                onOpenMessages={onOpenMessages}
+                onOpenProfile={onOpenProfile}
+              />
+            )}
+
             {tab === "members" && (
               <Members
                 squad={squad}
@@ -733,6 +784,8 @@ export default function SquadsPage({ session, onLogin }: Props) {
 
             {tab === "chat" && (
               <TeamChat
+                squadId={squad.squad_id}
+                members={squad.members}
                 channels={squad.channels ?? []}
                 selectedChannelId={selectedChannelId}
                 messages={(squad.messages ?? []).filter((message) => message.channel_id === selectedChannelId)}
@@ -1097,6 +1150,8 @@ function InviteFriends({
 }
 
 function TeamChat({
+  squadId,
+  members,
   channels,
   selectedChannelId,
   messages,
@@ -1121,6 +1176,8 @@ function TeamChat({
   onCancelRename,
   onDeleteChannel,
 }: {
+  squadId: string;
+  members: Member[];
   channels: SquadChannel[];
   selectedChannelId: string;
   messages: SquadMessage[];
@@ -1231,24 +1288,13 @@ function TeamChat({
       </aside>
 
       {selectedChannel?.channel_type === "voice" ? (
-        <section className="team-voice-panel">
-          <div className="team-voice-icon">🔊</div>
-          <span className="team-kicker">SALON VOCAL</span>
-          <h2>{selectedChannel.name}</h2>
-          <p>
-            Le salon vocal existe bien dans ta team. Le moteur audio en temps réel
-            sera branché séparément pour éviter de simuler de faux appels.
-          </p>
-
-          <div className="team-voice-status">
-            <span>Audio GameMate</span>
-            <strong>Pas encore activé</strong>
-          </div>
-
-          <button type="button" disabled>
-            Rejoindre le vocal
-          </button>
-        </section>
+        <SquadVoiceRoom
+          squadId={squadId}
+          channelId={selectedChannel.id}
+          channelName={selectedChannel.name}
+          currentUserId={currentUserId}
+          members={members}
+        />
       ) : (
         <div className="team-chat">
           <header className="team-chat-head">

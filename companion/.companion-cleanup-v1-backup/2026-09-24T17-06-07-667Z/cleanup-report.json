@@ -1,0 +1,10 @@
+{
+  "version": "Companion Cleanup V1",
+  "appliedAt": "2026-09-24T17:06:07.703Z",
+  "changed": [
+    "src/pages/FindMatesPage.css"
+  ],
+  "removed": [],
+  "skipped": [],
+  "backup": ".companion-cleanup-v1-backup\\2026-09-24T17-06-07-667Z"
+}

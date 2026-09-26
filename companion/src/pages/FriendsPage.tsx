@@ -422,6 +422,7 @@ export default function FriendsPage({
       {(error || notice) && (
         <div className={`friends-notice ${error ? "error" : ""}`}>
           {error || notice}
+          {error && <button type="button" onClick={() => void loadAll()}>Réessayer</button>}
         </div>
       )}
 

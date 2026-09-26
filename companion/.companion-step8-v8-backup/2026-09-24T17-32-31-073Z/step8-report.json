@@ -1,0 +1,10 @@
+{
+  "version": "Companion Step 8 LFG Live V8",
+  "appliedAt": "2026-09-24T17:32:31.104Z",
+  "changed": [
+    "src/pages/FindMatesPage.tsx",
+    "src/pages/FindMatesPage.css",
+    "src/components/LfgBoard.tsx",
+    "src/components/LfgBoard.css"
+  ]
+}

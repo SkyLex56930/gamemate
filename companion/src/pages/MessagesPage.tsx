@@ -612,7 +612,7 @@ export default function MessagesPage({
         </span>
       </header>
 
-      {error && <div className="messages-error">{error}</div>}
+      {error && <div className="messages-error"><span>{error}</span><button type="button" onClick={() => { setError(""); void loadConversations(); void loadFriends(); if (selectedConversationId) void loadMessages(selectedConversationId); }}>Réessayer</button></div>}
 
       <section className={`messages-layout ${selectedConversation ? "thread-open" : ""}`}>
         <aside className="messages-sidebar">
@@ -835,9 +835,6 @@ function FriendItem({
       <div className="messages-friend-actions">
         <button type="button" onClick={onMessage} title="Envoyer un message" aria-label="Envoyer un message">
           ✦
-        </button>
-        <button type="button" disabled title="Les appels vocaux seront activés avec le système d’appel réel" aria-label="Appel vocal indisponible">
-          ☎
         </button>
         <button type="button" onClick={onProfile} title="Voir le profil" aria-label="Voir le profil">
           •••

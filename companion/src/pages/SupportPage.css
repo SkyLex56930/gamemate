@@ -330,3 +330,38 @@
   .support-ticket-layout{grid-template-columns:1fr}
   .support-reply{grid-template-columns:1fr}
 }
+
+/* companion-cleanup-v1: retry actions */
+.friends-notice.error,
+.messages-error,
+.team-notice.error,
+.prc-notice.error,
+.support-error,
+.fmx-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.friends-notice.error button,
+.messages-error button,
+.team-notice.error button,
+.prc-notice.error button,
+.support-error button,
+.fmx-error button {
+  flex: 0 0 auto;
+  border: 1px solid rgba(255, 255, 255, .16);
+  border-radius: 9px;
+  padding: 7px 11px;
+  color: #fff;
+  background: rgba(255, 255, 255, .08);
+  cursor: pointer;
+}
+
+.friends-notice.error button:hover,
+.messages-error button:hover,
+.team-notice.error button:hover,
+.prc-notice.error button:hover,
+.support-error button:hover,
+.fmx-error button:hover { background: rgba(255, 255, 255, .14); }

@@ -279,7 +279,7 @@ export default function SupportPage({
         </button>
       </header>
 
-      {error && <div className="support-error">{error}</div>}
+      {error && <div className="support-error"><span>{error}</span><button type="button" onClick={() => { setError(""); void loadTickets(); void loadReports(); if (selectedTicketId) void loadMessages(selectedTicketId); }}>Réessayer</button></div>}
       {notice && <div className="support-notice">{notice}</div>}
 
       <section className="support-summary">

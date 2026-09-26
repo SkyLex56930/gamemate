@@ -1,0 +1,8 @@
+{
+  "version": "Companion Step 2 V2",
+  "appliedAt": "2026-09-22T16:43:43.704Z",
+  "changed": [
+    "src/pages/FindMatesPage.tsx",
+    "src/pages/FindMatesPage.css"
+  ]
+}

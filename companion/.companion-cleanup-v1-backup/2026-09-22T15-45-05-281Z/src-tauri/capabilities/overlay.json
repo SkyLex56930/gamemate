@@ -1,0 +1,13 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "overlay-capability",
+  "description": "Permissions minimales de la fenêtre overlay GameMate",
+  "windows": ["overlay"],
+  "platforms": ["windows", "linux", "macOS"],
+  "permissions": [
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "core:window:allow-hide",
+    "core:window:allow-start-dragging"
+  ]
+}

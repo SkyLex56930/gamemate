@@ -1,0 +1,33 @@
+
+/* GameMate Clean UI — page-local reset */
+:root{
+  --p-bg:#020912;
+  --p-bg2:#05131f;
+  --p-panel:#071725;
+  --p-panel2:#0a1c2d;
+  --p-border:rgba(36,88,126,.42);
+  --p-border-hot:#6138ff;
+  --p-text:#f6f8ff;
+  --p-muted:#8193aa;
+  --p-subtle:#536a83;
+  --p-violet:#612cff;
+  --p-cyan:#19cee1;
+  --p-green:#19dca5;
+  --p-red:#ff315f;
+}
+
+.notification-center{position:relative}
+.notification-bell{position:relative;display:grid;width:35px;height:35px;place-items:center;border:1px solid transparent;border-radius:6px;background:transparent;color:#d7dfe9;cursor:pointer}
+.notification-bell:hover,.notification-bell.active{border-color:var(--p-border);background:#071a2a}.notification-bell svg{width:18px;height:18px}
+.notification-badge{position:absolute;top:-4px;right:-4px;display:grid;min-width:17px;height:17px;place-items:center;border:2px solid #03101b;border-radius:999px;padding:0 3px;background:var(--p-red);font-size:8px}
+.notification-panel{position:absolute;z-index:500;top:42px;right:0;width:360px;max-height:600px;overflow:hidden;border:1px solid var(--p-border);border-radius:7px;background:#061522;box-shadow:0 25px 70px rgba(0,0,0,.4)}
+.notification-panel-head{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--p-border);padding:10px}.notification-panel-head span{color:var(--p-subtle);font-size:8px;font-weight:900;letter-spacing:.13em}.notification-panel-head h2{margin:3px 0 0;font-size:16px}
+.notification-error,.notification-success{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:7px 7px 0;border:1px solid rgba(255,49,95,.34);border-radius:6px;padding:8px 9px;background:rgba(255,49,95,.08);color:#ff9caf;font-size:8px}.notification-success{border-color:rgba(25,220,165,.32);background:rgba(25,220,165,.08);color:#9af2d5}.notification-success strong{color:#fff}.notification-success button{flex:0 0 auto;border:1px solid rgba(25,220,165,.42);border-radius:5px;padding:5px 8px;background:rgba(25,220,165,.13);color:#d9fff2;font-size:8px;cursor:pointer}
+.notification-list{max-height:460px;overflow-y:auto;padding:5px}.notification-item{width:100%;border:1px solid transparent;border-radius:5px;background:transparent;color:white}.notification-item:hover{border-color:var(--p-border);background:#0a2034}
+.notification-item-main,.notification-message{display:grid;width:100%;grid-template-columns:40px 1fr auto;align-items:center;gap:8px;border:0;padding:8px;background:transparent;color:white;text-align:left;cursor:pointer}.notification-avatar{display:grid;width:40px;height:40px;place-items:center;overflow:hidden;border:2px solid #6637ff;border-radius:50%;background:#18364d;font-weight:900}.notification-avatar img{width:100%;height:100%;object-fit:cover}
+.notification-item-copy{display:flex;min-width:0;flex-direction:column;gap:2px}.notification-item-copy strong{font-size:10px}.notification-item-copy span{color:#8fa2b9;font-size:8px}.notification-item-copy small{color:#647b95;font-size:7px}
+.notification-actions{display:grid;grid-template-columns:1fr 1fr;gap:5px;padding:0 8px 8px 56px}.notification-actions button,.notification-panel-foot button{min-height:28px;border:1px solid var(--p-border);border-radius:5px;background:#071a2a;color:#d5dee9}.notification-actions .accept{border-color:#6638ff;background:#4e22d7}
+.notification-panel-foot{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;border-top:1px solid var(--p-border);padding:7px}.notification-empty{display:grid;min-height:180px;place-items:center;color:var(--p-muted);text-align:center}
+@media(max-width:680px){.notification-panel{position:fixed;top:62px;right:8px;left:8px;width:auto}}
+
+.notification-session{display:grid;width:100%;grid-template-columns:40px minmax(0,1fr) auto;align-items:center;gap:8px;padding:8px;text-align:left;cursor:pointer}.notification-session:disabled{opacity:.65;cursor:wait}.notification-session-icon{display:grid;width:40px;height:40px;place-items:center;border:1px solid rgba(82,218,209,.38);border-radius:12px;background:linear-gradient(135deg,rgba(96,50,224,.28),rgba(36,202,214,.16));color:#63e2dc;font-size:12px}.notification-type.session{color:#59dcd6}

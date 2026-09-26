@@ -8,11 +8,13 @@ const appWindow = getCurrentWindow();
 type CompanionStatus = {
   installed: boolean;
   path: string | null;
+  installed_version: string | null;
 };
 
 type UpdateStatus = {
   latest_version: string;
   update_available: boolean;
+  installed_version: string | null;
 };
 
 type LauncherState =
@@ -26,6 +28,7 @@ type LauncherState =
 const EMPTY_STATUS: CompanionStatus = {
   installed: false,
   path: null,
+  installed_version: null,
 };
 
 function App() {
@@ -457,7 +460,11 @@ function App() {
                   <span className="eyebrow">INSTALLATION WINDOWS</span>
                   <h2>GameMate Companion</h2>
                 </div>
-                <span className="date-badge">ALPHA 0.1.0</span>
+                <span className="date-badge">
+                  {updateStatus?.latest_version
+                    ? `V${updateStatus.latest_version}`
+                    : "VERSION"}
+                </span>
               </div>
 
               <p>

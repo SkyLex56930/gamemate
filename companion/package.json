@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "overlay:native:configure": "cmake -S native-overlay -B native-overlay/build -A x64",
+    "overlay:native:build": "cmake --build native-overlay/build --config Release"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.116.0",

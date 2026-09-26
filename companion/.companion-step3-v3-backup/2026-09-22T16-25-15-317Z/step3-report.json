@@ -1,0 +1,10 @@
+{
+  "version": "Companion Step 3 Social V3",
+  "appliedAt": "2026-09-22T16:25:15.344Z",
+  "changed": [
+    "src/App.tsx",
+    "src/pages/FindMatesPage.tsx",
+    "src/components/NotificationCenter.tsx",
+    "src/components/NotificationCenter.css"
+  ]
+}

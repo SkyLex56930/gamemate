@@ -1,0 +1,12 @@
+{
+  "version": "Companion Step 6 Profils publics V6",
+  "appliedAt": "2026-09-24T15:42:03.211Z",
+  "changed": [
+    "src/App.tsx",
+    "src/pages/ProfilePage.tsx",
+    "src/pages/PublicProfilePage.tsx",
+    "src/pages/PublicProfilePage.css",
+    "src/components/ProfilePrivacyPanel.tsx",
+    "src/components/ProfilePrivacyPanel.css"
+  ]
+}

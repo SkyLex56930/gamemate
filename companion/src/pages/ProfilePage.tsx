@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNod
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase";
 import { getProfileCompletion, type ProfileCompletionTask } from "../lib/profileCompletion";
+import ProfilePrivacyPanel from "../components/ProfilePrivacyPanel";
 import "./ProfilePage.css";
 
 type Profile = {
@@ -104,7 +105,7 @@ export default function ProfilePage({
   loading,
   onLogin,
 }: Props) {
-  const [tab, setTab] = useState<"profile" | "setup" | "library">("profile");
+  const [tab, setTab] = useState<"profile" | "setup" | "privacy" | "library">("profile");
   const [setupSection, setSetupSection] = useState<SetupSection>("identity");
   const [localProfile, setLocalProfile] = useState<Profile | null>(profile);
   const [cosmetics, setCosmetics] = useState<Cosmetic[]>([]);
@@ -645,6 +646,9 @@ export default function ProfilePage({
           Configurer
           {completion.percent < 100 && <span>{completion.percent}%</span>}
         </button>
+        <button type="button" className={tab === "privacy" ? "active" : ""} onClick={() => setTab("privacy")}>
+          Confidentialité
+        </button>
         <button type="button" className={tab === "library" ? "active" : ""} onClick={() => setTab("library")}>
           Bibliothèque
           {ownedIds.size > 0 && <span>{ownedIds.size}</span>}
@@ -654,6 +658,7 @@ export default function ProfilePage({
       {(notice || error) && (
         <div className={`prc-notice ${error ? "error" : ""}`}>
           {error || notice}
+          {error && <button type="button" onClick={() => void loadCustomization()}>Réessayer</button>}
         </div>
       )}
 
@@ -715,12 +720,12 @@ export default function ProfilePage({
                 <div>
                   <span>Cadre</span>
                   <strong>{equippedFrame?.name ?? "Aucun"}</strong>
-                  {equippedFrame && <button type="button" onClick={() => void equipCosmetic(null, "frame")}>Retirer</button>}
+                  {equippedFrame && <button type="button" disabled={busy === "equip-frame"} onClick={() => void equipCosmetic(null, "frame")}>{busy === "equip-frame" ? "Mise à jour..." : "Déséquiper"}</button>}
                 </div>
                 <div>
                   <span>Bannière</span>
                   <strong>{equippedBanner?.name ?? (localProfile?.banner_url ? "Image personnelle" : "Aucune")}</strong>
-                  {equippedBanner && <button type="button" onClick={() => void equipCosmetic(null, "banner")}>Utiliser mon image</button>}
+                  {equippedBanner && <button type="button" disabled={busy === "equip-banner"} onClick={() => void equipCosmetic(null, "banner")}>{busy === "equip-banner" ? "Mise à jour..." : "Déséquiper"}</button>}
                 </div>
               </div>
 
@@ -774,6 +779,8 @@ export default function ProfilePage({
           onSavePreferences={() => void savePreferences()}
           onSaveAvailability={() => void saveAvailability()}
         />
+      ) : tab === "privacy" ? (
+        <ProfilePrivacyPanel />
       ) : (
         <div className="prc-library">
           <section className="prc-library-top">
@@ -824,10 +831,19 @@ export default function ProfilePage({
                       <button
                         type="button"
                         className={equipped ? "equipped" : ""}
-                        disabled={equipped || busy === `equip-${item.cosmetic_type}`}
-                        onClick={() => void equipCosmetic(item, item.cosmetic_type)}
+                        disabled={busy === `equip-${item.cosmetic_type}`}
+                        onClick={() =>
+                          void equipCosmetic(
+                            equipped ? null : item,
+                            item.cosmetic_type
+                          )
+                        }
                       >
-                        {equipped ? "Équipé" : "Équiper"}
+                        {busy === `equip-${item.cosmetic_type}`
+                          ? "Mise à jour..."
+                          : equipped
+                            ? "Déséquiper"
+                            : "Équiper"}
                       </button>
                     ) : item.unlock_method === "purchase" ? (
                       <button type="button" disabled>
