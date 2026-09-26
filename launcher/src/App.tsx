@@ -186,23 +186,27 @@ function App() {
     }
   }
 
-  async function handlePrimaryAction() {
-    if (
-      launcherState === "checking" ||
-      launcherState === "installing" ||
-      launcherState === "updating" ||
-      launcherState === "launching"
-    ) {
-      return;
-    }
-
-    if (companion.installed) {
-      await launchCompanion();
-    } else {
-      await installCompanion();
-    }
+ async function handlePrimaryAction() {
+  if (
+    launcherState === "checking" ||
+    launcherState === "installing" ||
+    launcherState === "updating" ||
+    launcherState === "launching"
+  ) {
+    return;
   }
 
+  if (!companion.installed) {
+    await installCompanion();
+    return;
+  }
+
+  if (updateStatus?.update_available) {
+    await updateCompanion();
+  }
+
+  await launchCompanion();
+}
   async function handleSecondaryAction() {
     if (
       launcherState === "checking" ||
