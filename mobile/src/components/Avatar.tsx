@@ -1,13 +1,17 @@
-﻿import { StyleSheet, Text, View } from "react-native";
+﻿import { useState } from "react";
+import { Image, StyleSheet, Text, View } from "react-native";
 import { theme } from "../theme/theme";
 
 export function Avatar({
   name,
   size = 48,
+  url,
 }: {
   name: string;
   size?: number;
+  url?: string | null;
 }) {
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
   const initials =
     name
       .trim()
@@ -24,22 +28,27 @@ export function Avatar({
           width: size,
           height: size,
           borderRadius: size * 0.34,
+          overflow: "hidden",
         },
       ]}
     >
-      <Text
+      {url && failedUrl !== url ? (
+        <Image source={{ uri: url }} style={styles.photo}
+          accessibilityLabel={`Photo de ${name}`} onError={() => setFailedUrl(url)} />
+      ) : <Text
         style={[
           styles.text,
           { fontSize: size * 0.32 },
         ]}
       >
         {initials}
-      </Text>
+      </Text>}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  photo: { width: "100%", height: "100%" },
   avatar: {
     alignItems: "center",
     justifyContent: "center",

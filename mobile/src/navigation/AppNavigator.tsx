@@ -91,10 +91,11 @@ export function AppNavigator({ session }: { session: Session }) {
     });
   }
 
-  function goToTab(tab: "Messages" | "Amis" | "Mates") {
+  function goToTab(tab: "Messages" | "Amis" | "Mates" | "Profil") {
     if (tab === "Messages") navigation.navigate("Messages", { screen: "Conversations" });
     else if (tab === "Amis") navigation.navigate("Amis");
-    else navigation.navigate("Mates");
+    else if (tab === "Mates") navigation.navigate("Mates");
+    else navigation.navigate("Profil");
   }
 
   return <NavigationContainer ref={navigation} theme={{

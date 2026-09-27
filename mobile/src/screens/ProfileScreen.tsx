@@ -1,8 +1,10 @@
-﻿import { useEffect, useState } from "react";
+﻿import { useCallback, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import type { Session } from "@supabase/supabase-js";
 import { Ionicons } from "@expo/vector-icons";
+import { useFocusEffect } from "@react-navigation/native";
 
+import { Avatar } from "../components/Avatar";
 import { supabase } from "../lib/supabase";
 import { theme } from "../theme/theme";
 
@@ -11,23 +13,26 @@ export function ProfileScreen({ session }: { session: Session }) {
   const [username, setUsername] = useState("");
   const [bio, setBio] = useState("");
   const [region, setRegion] = useState("");
+  const [language, setLanguage] = useState("");
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
 
-  useEffect(() => {
-    void supabase
+  const loadProfile = useCallback(async () => {
+    const { data } = await supabase
       .from("profiles")
-      .select("display_name,username,bio,region")
+      .select("display_name,username,bio,region,language,avatar_url")
       .eq("id", session.user.id)
-      .single()
-      .then(({ data }) => {
-        if (!data) return;
-
-        setDisplayName(data.display_name ?? "");
-        setUsername(data.username ?? "");
-        setBio(data.bio ?? "");
-        setRegion(data.region ?? "");
-      });
+      .single();
+    if (!data) return;
+    setDisplayName(data.display_name ?? "");
+    setUsername(data.username ?? "");
+    setBio(data.bio ?? "");
+    setRegion(data.region ?? "");
+    setLanguage(data.language ?? "");
+    setAvatarUrl(data.avatar_url);
   }, [session.user.id]);
+
+  useFocusEffect(useCallback(() => { void loadProfile(); }, [loadProfile]));
 
   async function save() {
     const { error } = await supabase
@@ -36,6 +41,7 @@ export function ProfileScreen({ session }: { session: Session }) {
         display_name: displayName.trim() || null,
         bio: bio.trim() || null,
         region: region.trim() || null,
+        language: language.trim() || null,
         updated_at: new Date().toISOString(),
       })
       .eq("id", session.user.id);
@@ -48,9 +54,7 @@ export function ProfileScreen({ session }: { session: Session }) {
       <View style={styles.banner} />
 
       <View style={styles.avatar}>
-        <Text style={styles.avatarText}>
-          {(displayName || username || "G").slice(0, 1).toUpperCase()}
-        </Text>
+        <Avatar name={displayName || username || "Joueur"} url={avatarUrl} size={84} />
       </View>
 
       <Text style={styles.name}>{displayName || username || "Joueur"}</Text>
@@ -82,6 +86,14 @@ export function ProfileScreen({ session }: { session: Session }) {
           style={styles.input}
         />
 
+        <Text style={styles.label}>Langue</Text>
+
+        <TextInput
+          value={language}
+          onChangeText={setLanguage}
+          style={styles.input}
+        />
+
         {notice ? <Text style={styles.notice}>{notice}</Text> : null}
 
         <Pressable style={styles.button} onPress={() => void save()}>
@@ -103,21 +115,16 @@ const styles = StyleSheet.create({
     backgroundColor: "#101A35",
   },
   avatar: {
-    width: 84,
-    height: 84,
-    borderRadius: 28,
+    width: 92,
+    height: 92,
+    borderRadius: 30,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#172744",
-    marginTop: -42,
+    marginTop: -46,
     marginLeft: 20,
     borderWidth: 4,
     borderColor: theme.colors.background,
-  },
-  avatarText: {
-    color: theme.colors.text,
-    fontSize: 30,
-    fontWeight: "900",
   },
   name: {
     color: theme.colors.text,
