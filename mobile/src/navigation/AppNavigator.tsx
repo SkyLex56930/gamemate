@@ -15,6 +15,8 @@ import { MessagesScreen } from "../screens/MessagesScreen";
 import { ChatScreen } from "../screens/ChatScreen";
 import { DiscoverScreen } from "../screens/DiscoverScreen";
 import { ProfileScreen } from "../screens/ProfileScreen";
+import { ProfileSettingsScreen } from "../screens/ProfileSettingsScreen";
+import { ShopScreen } from "../screens/ShopScreen";
 import { supabase } from "../lib/supabase";
 import type { ChatProfile, Conversation, ConversationItem } from "../lib/messages";
 import { theme } from "../theme/theme";
@@ -24,16 +26,23 @@ export type MessagesStackParamList = {
   Chat: { conversationId: string; profile: ChatProfile };
 };
 
+export type ProfileStackParamList = {
+  Profil: undefined;
+  Parametres: undefined;
+  Boutique: undefined;
+};
+
 type TabParamList = {
   Accueil: undefined;
   Amis: undefined;
   Messages: NavigatorScreenParams<MessagesStackParamList>;
   Mates: undefined;
-  Profil: undefined;
+  Profil: NavigatorScreenParams<ProfileStackParamList>;
 };
 
 const Tabs = createBottomTabNavigator<TabParamList>();
 const Stack = createNativeStackNavigator<MessagesStackParamList>();
+const ProfileStack = createNativeStackNavigator<ProfileStackParamList>();
 
 function MessagesStackView({ session, onUnreadChange }: {
   session: Session;
@@ -47,6 +56,22 @@ function MessagesStackView({ session, onUnreadChange }: {
       {(props) => <ChatScreen {...props} session={session} />}
     </Stack.Screen>
   </Stack.Navigator>;
+}
+
+function ProfileStackView({ session }: { session: Session }) {
+  return <ProfileStack.Navigator screenOptions={{ headerShown: false }}>
+    <ProfileStack.Screen name="Profil">
+      {({ navigation }) => <ProfileScreen session={session}
+        onSettings={() => navigation.navigate("Parametres")}
+        onShop={() => navigation.navigate("Boutique")} />}
+    </ProfileStack.Screen>
+    <ProfileStack.Screen name="Parametres">
+      {({ navigation }) => <ProfileSettingsScreen session={session} onBack={() => navigation.goBack()} />}
+    </ProfileStack.Screen>
+    <ProfileStack.Screen name="Boutique">
+      {({ navigation }) => <ShopScreen session={session} onBack={() => navigation.goBack()} />}
+    </ProfileStack.Screen>
+  </ProfileStack.Navigator>;
 }
 
 function iconName(name: keyof TabParamList, focused: boolean): keyof typeof Ionicons.glyphMap {
@@ -91,11 +116,11 @@ export function AppNavigator({ session }: { session: Session }) {
     });
   }
 
-  function goToTab(tab: "Messages" | "Amis" | "Mates" | "Profil") {
+  function goToTab(tab: "Messages" | "Amis" | "Mates" | "Profil" | "Boutique") {
     if (tab === "Messages") navigation.navigate("Messages", { screen: "Conversations" });
     else if (tab === "Amis") navigation.navigate("Amis");
     else if (tab === "Mates") navigation.navigate("Mates");
-    else navigation.navigate("Profil");
+    else navigation.navigate("Profil", { screen: tab === "Boutique" ? "Boutique" : "Profil" });
   }
 
   return <NavigationContainer ref={navigation} theme={{
@@ -141,7 +166,7 @@ export function AppNavigator({ session }: { session: Session }) {
         {() => <DiscoverScreen session={session} onMessage={(userId) => { void openMessage(userId); }} />}
       </Tabs.Screen>
       <Tabs.Screen name="Profil">
-        {() => <ProfileScreen session={session} />}
+        {() => <ProfileStackView session={session} />}
       </Tabs.Screen>
     </Tabs.Navigator>
   </NavigationContainer>;

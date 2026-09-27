@@ -12,7 +12,7 @@ import { theme } from "../theme/theme";
 
 type Props = {
   session: Session;
-  onNavigate: (tab: "Messages" | "Amis" | "Mates" | "Profil") => void;
+  onNavigate: (tab: "Messages" | "Amis" | "Mates" | "Profil" | "Boutique") => void;
   onOpenConversation: (item: ConversationItem) => void;
   onUnreadChange: (count: number) => void;
 };
@@ -80,8 +80,8 @@ export function HomeScreen({ session, onNavigate, onOpenConversation, onUnreadCh
               </Text>
             </View>
             <Pressable onPress={() => onNavigate("Profil")} style={styles.editButton}
-              accessibilityRole="button" accessibilityLabel="Voir et modifier mon profil">
-              <Ionicons name="create-outline" size={20} color={theme.colors.text} />
+              accessibilityRole="button" accessibilityLabel="Voir mon profil">
+              <Ionicons name="person-outline" size={20} color={theme.colors.text} />
             </Pressable>
           </View>
 
@@ -156,6 +156,16 @@ export function HomeScreen({ session, onNavigate, onOpenConversation, onUnreadCh
         <View style={styles.discoverCopy}>
           <Text style={styles.discoverTitle}>Trouver des mates</Text>
           <Text style={styles.discoverDescription}>Découvre des joueurs et commence une discussion.</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={17} color={theme.colors.textSoft} />
+      </Pressable>
+      <Pressable style={styles.discover} onPress={() => onNavigate("Boutique")} accessibilityRole="button">
+        <View style={styles.discoverIcon}>
+          <Ionicons name="sparkles-outline" size={21} color={theme.colors.cyan} />
+        </View>
+        <View style={styles.discoverCopy}>
+          <Text style={styles.discoverTitle}>Boutique GameMate</Text>
+          <Text style={styles.discoverDescription}>Découvre les cadres, bannières et récompenses.</Text>
         </View>
         <Ionicons name="chevron-forward" size={17} color={theme.colors.textSoft} />
       </Pressable>

@@ -6,6 +6,8 @@ export type MyProfile = {
   display_name: string | null;
   avatar_url: string | null;
   banner_url: string | null;
+  equipped_frame_id: string | null;
+  equipped_banner_cosmetic_id: string | null;
   bio: string | null;
   region: string | null;
   language: string | null;
@@ -28,7 +30,7 @@ export type ProfileSummary = {
 
 export async function getMyProfileSummary(userId: string): Promise<ProfileSummary> {
   const { data, error } = await supabase.from("profiles")
-    .select("id,username,display_name,avatar_url,banner_url,bio,region,language")
+    .select("id,username,display_name,avatar_url,banner_url,equipped_frame_id,equipped_banner_cosmetic_id,bio,region,language")
     .eq("id", userId).single();
   if (error || !data) throw error ?? new Error("Profil introuvable");
   const profile = data as MyProfile;
