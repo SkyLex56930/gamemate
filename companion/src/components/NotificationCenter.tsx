@@ -913,6 +913,11 @@ export default function NotificationCenter({
 
       if (item.actionTarget === "squad") {
         onOpenSquads();
+      } else if (item.actionTarget === "messages") {
+        const callerId = typeof item.metadata.caller_id === "string"
+          ? item.metadata.caller_id
+          : item.actor.id;
+        onOpenMessage(callerId);
       } else {
         sessionStorage.setItem("gamemate-find-mates-mode", "live");
         window.dispatchEvent(new CustomEvent("gamemate:open-lfg"));
@@ -1317,6 +1322,7 @@ function LfgItem({
     lfg_application_declined: "RÉPONSE",
     lfg_application_withdrawn: "RETRAIT",
     lfg_post_closed: "ANNONCE",
+    direct_call: "APPEL",
   };
 
   return (

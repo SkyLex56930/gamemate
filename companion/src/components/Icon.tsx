@@ -6,10 +6,10 @@ export type IconName =
   | "clock" | "close" | "download" | "edit" | "eye" | "eye-off" | "flask"
   | "gamepad" | "globe" | "gauge" | "headphones" | "home" | "info" | "layout-grid"
   | "life-buoy" | "link" | "lock" | "log-in" | "log-out" | "map-pin" | "maximize" | "menu" | "message-circle" | "minus"
-  | "mic" | "mic-off" | "monitor" | "more-horizontal" | "music" | "palette" | "play"
+  | "mic" | "mic-off" | "monitor" | "more-horizontal" | "music" | "palette" | "phone" | "phone-off" | "play"
   | "plus" | "refresh" | "search" | "send" | "settings" | "shield" | "sparkles"
-  | "target" | "terminal" | "trash" | "trophy" | "upload" | "user" | "user-check"
-  | "user-plus" | "user-x" | "users" | "volume-2" | "volume-x" | "wifi" | "zap";
+  | "screen-share" | "screen-share-off" | "star" | "target" | "terminal" | "trash" | "trophy" | "upload" | "user" | "user-check"
+  | "user-plus" | "user-x" | "users" | "video" | "video-off" | "volume-2" | "volume-x" | "wifi" | "zap";
 
 type IconProps = Omit<SVGProps<SVGSVGElement>, "children"> & {
   name: IconName;
@@ -80,14 +80,19 @@ const iconPaths: Record<IconName, ReactNode> = {
   "more-horizontal": <><circle cx="5" cy="12" r="1" fill="currentColor" stroke="none" /><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" /><circle cx="19" cy="12" r="1" fill="currentColor" stroke="none" /></>,
   music: <><path d="M9 18V5l11-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="17" cy="16" r="3" /></>,
   palette: <><path d="M12 3a9 9 0 0 0 0 18h1.5a1.5 1.5 0 0 0 0-3H12a2 2 0 0 1 0-4h3a6 6 0 0 0 0-12Z" /><circle cx="7.5" cy="10" r=".7" fill="currentColor" /><circle cx="10" cy="6.5" r=".7" fill="currentColor" /><circle cx="15" cy="6.5" r=".7" fill="currentColor" /></>,
+  phone: <path d="M5.2 3h3l1.5 4-2 1.8a15 15 0 0 0 7.5 7.5l1.8-2 4 1.5v3A2.2 2.2 0 0 1 18.8 21C10.1 20.5 3.5 13.9 3 5.2A2.2 2.2 0 0 1 5.2 3Z" />,
+  "phone-off": <><path d="m3 3 18 18" /><path d="M8.7 8.7 7.8 9.5a15 15 0 0 0 6.7 6.7l1.8-2 4 1.5v3a2.2 2.2 0 0 1-2.2 2.2C9.9 20.3 3.7 14.1 3.1 5.9A2.2 2.2 0 0 1 5.3 3.7h2.8l1.2 3.1" /><path d="M15 5a7 7 0 0 1 4 4" /></>,
   play: <><circle cx="12" cy="12" r="9" /><path d="m10 8 6 4-6 4Z" /></>,
   plus: <><path d="M12 5v14M5 12h14" /></>,
   refresh: <><path d="M20 7v5h-5" /><path d="M4 17v-5h5" /><path d="M6.1 8A7 7 0 0 1 18.4 6L20 8M4 16l1.6 2A7 7 0 0 0 18 16" /></>,
   search: <><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></>,
+  "screen-share": <><rect x="3" y="4" width="18" height="13" rx="2" /><path d="M8 21h8M12 17v4M8 11l4-4 4 4M12 7v7" /></>,
+  "screen-share-off": <><path d="m3 3 18 18" /><path d="M10 4h9a2 2 0 0 1 2 2v9M18 17H5a2 2 0 0 1-2-2V6c0-.5.2-1 .5-1.4M8 21h8M12 17v4" /></>,
   send: <><path d="m22 2-7 20-4-9-9-4Z" /><path d="M22 2 11 13" /></>,
   settings: <><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1A1.7 1.7 0 0 0 9 4.6 1.7 1.7 0 0 0 10 3V2.8h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z" /></>,
   shield: <><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" /><path d="m9 12 2 2 4-4" /></>,
   sparkles: <><path d="m12 3 1.3 3.7L17 8l-3.7 1.3L12 13l-1.3-3.7L7 8l3.7-1.3ZM19 14l.8 2.2L22 17l-2.2.8L19 20l-.8-2.2L16 17l2.2-.8ZM5 14l.7 1.8L7.5 16l-1.8.7L5 18.5l-.7-1.8L2.5 16l1.8-.7Z" /></>,
+  star: <path d="m12 2.8 2.8 5.7 6.3.9-4.6 4.4 1.1 6.3-5.6-3-5.6 3 1.1-6.3-4.6-4.4 6.3-.9Z" />,
   target: <><circle cx="12" cy="12" r="9" /><circle cx="12" cy="12" r="5" /><circle cx="12" cy="12" r="1" fill="currentColor" /></>,
   terminal: <><rect x="3" y="4" width="18" height="16" rx="2" /><path d="m7 9 3 3-3 3M13 15h4" /></>,
   trash: <><path d="M4 7h16M10 11v6M14 11v6M6 7l1 14h10l1-14M9 7V4h6v3" /></>,
@@ -98,6 +103,8 @@ const iconPaths: Record<IconName, ReactNode> = {
   "user-plus": <><circle cx="9" cy="8" r="4" /><path d="M2 21a7 7 0 0 1 12-5M19 8v6M16 11h6" /></>,
   "user-x": <><circle cx="9" cy="8" r="4" /><path d="M2 21a7 7 0 0 1 12-5M17 17l5 5M22 17l-5 5" /></>,
   users: <><circle cx="9" cy="8" r="4" /><path d="M2 21a7 7 0 0 1 14 0M16 4a4 4 0 0 1 0 8M18 15a6 6 0 0 1 4 6" /></>,
+  video: <><path d="M15 9.5 20 6v12l-5-3.5" /><rect x="3" y="5" width="12" height="14" rx="2" /></>,
+  "video-off": <><path d="m3 3 18 18" /><path d="M10.5 5H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-1.5M17 9.5 21 7v10l-2.2-1.4" /></>,
   "volume-2": <><path d="M11 5 6 9H3v6h3l5 4Z" /><path d="M15 9a4 4 0 0 1 0 6M18 6a8 8 0 0 1 0 12" /></>,
   "volume-x": <><path d="M11 5 6 9H3v6h3l5 4ZM16 10l5 5M21 10l-5 5" /></>,
   wifi: <><path d="M5 12.5a10 10 0 0 1 14 0M8 16a6 6 0 0 1 8 0M11 19.5a2 2 0 0 1 2 0M2 9a14 14 0 0 1 20 0" /></>,

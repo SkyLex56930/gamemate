@@ -1,13 +1,11 @@
-﻿import { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "./lib/supabase";
 import ModerationPage from "./ModerationPage";
 import SupportPage from "./SupportPage";
-import PlayersPage from "./PlayersPage";
-import AnnouncementsPage from "./AnnouncementsPage";
 
 type Role="owner"|"admin"|"moderator";
-type Section="dashboard"|"players"|"support"|"moderation"|"announcements"|"games"|"cosmetics"|"objectives"|"staff"|"audit";
+type Section="dashboard"|"games"|"cosmetics"|"objectives"|"moderation"|"support"|"staff"|"audit";
 type Access={allowed:boolean;role:Role|null};
 type Game={id:number;slug:string;name:string;is_active:boolean|null;description:string|null;logo_url:string|null;cover_url:string|null;banner_url:string|null;crossplay_enabled:boolean;genre:string|null;sort_order:number};
 type Platform={id:number;name:string};
@@ -17,16 +15,9 @@ type Staff={user_id:string;role:Role;is_active:boolean;created_at:string};
 type Audit={id:number;actor_id:string;action:string;entity_type:string;entity_id:string|null;created_at:string};
 
 const NAV:[Section,string,string][]=[
- ["dashboard","Tableau de bord","Vue générale"],
- ["players","Joueurs","Comptes & présence"],
- ["support","Support","Tickets"],
- ["moderation","Modération","Signalements & sanctions"],
- ["announcements","Annonces","Communication"],
- ["games","Jeux","Catalogue"],
- ["cosmetics","Cosmétiques","Profil & boutique"],
- ["objectives","Objectifs","Récompenses"],
- ["staff","Équipe admin","Admins & modos"],
- ["audit","Journal","Historique"]
+ ["dashboard","Tableau de bord","Vue d’ensemble"],["games","Jeux","Catalogue"],
+ ["cosmetics","Cosmétiques","Profil & boutique"],["objectives","Objectifs","Récompenses"],
+ ["moderation","Modération","Équipe & salons"],["support","Support","Tickets & signalements"],["staff","Équipe admin","Admins & modos"],["audit","Journal","Historique"]
 ];
 
 export default function App(){
@@ -88,9 +79,7 @@ export default function App(){
    <div className="account"><span>{access.role}</span><strong>{session.user.email}</strong><button onClick={()=>void supabase.auth.signOut()}>Déconnexion</button></div>
   </aside>
   <main className="content">
-   {section==="dashboard"&&<Dashboard role={access.role} onNavigate={setSection}/>}
-   {section==="players"&&<PlayersPage/>}
-   {section==="announcements"&&<AnnouncementsPage canPublish={access.role!=="moderator"}/>}
+   {section==="dashboard"&&<Dashboard role={access.role}/>}
    {section==="games"&&<Games canEdit={access.role!=="moderator"}/>}
    {section==="cosmetics"&&<Cosmetics canEdit={access.role!=="moderator"}/>}
    {section==="objectives"&&<Objectives canEdit={access.role!=="moderator"}/>}
@@ -113,43 +102,17 @@ function Login(){
  </div></div>
 }
 
-function Dashboard({role,onNavigate}:{role:Role;onNavigate:(section:Section)=>void}){
- const [stats,setStats]=useState({players:0,online:0,tickets:0,reports:0});
- useEffect(()=>{
-  void Promise.all([
-   supabase.rpc("admin_list_players",{p_search:null,p_only_online:false,p_limit:500}),
-   supabase.from("support_tickets").select("*",{count:"exact",head:true}).not("status","in",'("resolved","closed")'),
-   supabase.from("user_reports").select("*",{count:"exact",head:true}).not("status","in",'("resolved","dismissed")')
-  ]).then(([p,t,r])=>{
-   const players=(p.data??[]) as any[];
-   setStats({
-    players:players.length,
-    online:players.filter(x=>x.presence_status==="online"||x.presence_status==="busy").length,
-    tickets:t.count??0,
-    reports:r.count??0
-   })
-  })
- },[]);
- return <Page title="Tableau de bord" subtitle="Ce qui demande ton attention aujourd’hui.">
-  <div className="admin-kpi-grid">
-   <button onClick={()=>onNavigate("players")}><small>Joueurs</small><strong>{stats.players}</strong><span>{stats.online} actifs maintenant</span></button>
-   <button onClick={()=>onNavigate("support")}><small>Support</small><strong>{stats.tickets}</strong><span>tickets à traiter</span></button>
-   <button onClick={()=>onNavigate("moderation")}><small>Modération</small><strong>{stats.reports}</strong><span>signalements actifs</span></button>
-   <button onClick={()=>onNavigate("announcements")}><small>Communication</small><strong>+</strong><span>publier une annonce</span></button>
-  </div>
-  <section className="panel admin-dashboard-actions">
-   <div><span className="eyebrow">ACCÈS RAPIDES</span><h2>Actions fréquentes</h2></div>
-   <div>
-    <button onClick={()=>onNavigate("players")}>Voir les joueurs actifs</button>
-    <button onClick={()=>onNavigate("support")}>Traiter le support</button>
-    <button onClick={()=>onNavigate("announcements")}>Créer une annonce</button>
-   </div>
-  </section>
-  <section className="panel admin-dashboard-note">
-   <span className="eyebrow">SESSION ADMIN</span>
-   <h2>{role.toUpperCase()}</h2>
-   <p>Les actions sensibles restent contrôlées côté serveur par les rôles GameMate.</p>
-  </section>
+function Dashboard({role}:{role:Role}){
+ const [counts,setCounts]=useState({games:0,cosmetics:0,objectives:0});
+ useEffect(()=>{void Promise.all([
+  supabase.from("games").select("*",{count:"exact",head:true}),
+  supabase.from("profile_cosmetics").select("*",{count:"exact",head:true}),
+  supabase.from("profile_objectives").select("*",{count:"exact",head:true})
+ ]).then(([g,c,o])=>setCounts({games:g.count??0,cosmetics:c.count??0,objectives:o.count??0}))},[]);
+ return <Page title="Tableau de bord" subtitle="Administration centrale de GameMate.">
+  <div className="stats"><Stat label="Jeux" value={counts.games}/><Stat label="Cosmétiques" value={counts.cosmetics}/><Stat label="Objectifs" value={counts.objectives}/><Stat label="Rôle" value={role.toUpperCase()}/></div>
+  <section className="panel"><span className="eyebrow">SÉCURITÉ</span><h2>Permissions serveur</h2><p>Les écritures sensibles passent par des RPC sécurisées. Aucun simple bouton caché ne donne des privilèges.</p></section>
+  <section className="panel"><span className="eyebrow">PRÉVU POUR GAMEMATE</span><div className="cards"><Info t="Jeux" x="Covers, logos, bannières, plateformes, rangs, rôles et crossplay."/><Info t="Cosmétiques" x="Cadres, bannières, rareté, prix et activation."/><Info t="Objectifs" x="Récompenses liées aux cosmétiques."/><Info t="Modération" x="Le rôle modérateur existe déjà. Les outils de sanction viendront ensuite."/><Info t="Communautés" x="Préparées comme système plus gros que les Teams, avec premium plus tard."/><Info t="Boutique" x="Catalogue prêt, mais aucun faux paiement n’est activé."/></div></section>
  </Page>
 }
 
@@ -244,4 +207,3 @@ function Thumb({url,text}:{url:string|null;text:string}){return <div className="
 function Upload({title,url,disabled,file}:{title:string;url:string;disabled:boolean;file:(f:File)=>void}){return <label className="upload"><span>{title}</span><div>{url?<img src={url}/>:<b>Image</b>}</div><input disabled={disabled} type="file" accept="image/png,image/jpeg,image/webp" onChange={e=>{const f=e.target.files?.[0];if(f)file(f)}}/></label>}
 function Empty({title,text}:{title:string;text:string}){return <div className="empty"><strong>{title}</strong><p>{text}</p></div>}
 function Center({title,text,action}:{title:string;text:string;action?:React.ReactNode}){return <div className="center"><div><h1>{title}</h1><p>{text}</p>{action}</div></div>}
-

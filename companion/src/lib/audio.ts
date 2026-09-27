@@ -43,10 +43,11 @@ function effectiveVolume(kind: "receive" | "send") {
   return master * channel;
 }
 
-async function play(path: string, volume: number) {
+async function play(path: string, volume: number, playbackRate = 1) {
   try {
     const audio = new Audio(path);
     audio.volume = Math.max(0, Math.min(1, volume));
+    audio.playbackRate = playbackRate;
     await applyPreferredOutput(audio);
     await audio.play();
     return true;
@@ -61,6 +62,12 @@ export function playNotificationSound(force = false) {
   if (!force && localStorage.getItem("gamemate-presence-status") === "dnd") return;
   if (!canPlay("receive")) return;
   void play("/sounds/notification-bell.wav", effectiveVolume("receive"));
+}
+
+export function playOutgoingCallTone(recipientOnline: boolean) {
+  if (!canPlay("receive")) return;
+  const volume = effectiveVolume("receive") * (recipientOnline ? 0.42 : 0.3);
+  void play("/sounds/notification-bell.wav", volume, recipientOnline ? 1.12 : 0.62);
 }
 
 export function playMessageSendSound() {

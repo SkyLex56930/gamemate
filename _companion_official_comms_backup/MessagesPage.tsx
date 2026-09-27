@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase";
 import { playMessageSendSound } from "../lib/audio";
@@ -49,27 +49,12 @@ type ConversationView = {
   presence: PresenceSnapshot;
 };
 
-type SidebarTab = "conversations" | "friends" | "calls";
+type SidebarTab = "conversations" | "friends";
 
 type FriendWithPresence = {
   user_id: string;
   profile: Profile;
   presence: PresenceSnapshot;
-};
-
-type DirectCallHistory = {
-  call_id: string;
-  other_user_id: string;
-  other_display_name: string | null;
-  other_username: string | null;
-  other_avatar_url: string | null;
-  direction: "incoming" | "outgoing";
-  media_mode: "audio" | "video";
-  status: "ringing" | "active" | "declined" | "missed" | "cancelled" | "ended";
-  started_at: string;
-  answered_at: string | null;
-  ended_at: string | null;
-  duration_seconds: number;
 };
 
 export default function MessagesPage({
@@ -87,8 +72,6 @@ export default function MessagesPage({
   const [query, setQuery] = useState("");
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>("conversations");
   const [friends, setFriends] = useState<FriendWithPresence[]>([]);
-  const [callHistory, setCallHistory] = useState<DirectCallHistory[]>([]);
-  const [loadingCalls, setLoadingCalls] = useState(true);
   const [loadingFriends, setLoadingFriends] = useState(true);
   const [myPresence, setMyPresence] = useState<OwnPresenceStatus>(readPresenceStatus);
   const [loadingList, setLoadingList] = useState(true);
@@ -98,42 +81,19 @@ export default function MessagesPage({
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const threadBodyRef = useRef<HTMLDivElement | null>(null);
   const forceBottomRef = useRef(false);
-  const stickToBottomRef = useRef(true);
-  const selectedConversationIdRef = useRef<string | null>(null);
-  const messageRequestIdRef = useRef(0);
-  const callRequestIdRef = useRef(0);
-  const onUnreadCountChangeRef = useRef(onUnreadCountChange);
 
   const userId = session?.user?.id ?? null;
-
-  useEffect(() => {
-    onUnreadCountChangeRef.current = onUnreadCountChange;
-  }, [onUnreadCountChange]);
-
-  useEffect(() => {
-    selectedConversationIdRef.current = selectedConversationId;
-  }, [selectedConversationId]);
-
-  const unreadTotal = useMemo(
-    () => conversations.reduce((total, conversation) => total + conversation.unread, 0),
-    [conversations]
-  );
-
-  useEffect(() => {
-    onUnreadCountChangeRef.current(unreadTotal);
-  }, [unreadTotal]);
 
   const loadConversations = useCallback(async (background = false) => {
     if (!userId) {
       setConversations([]);
       setLoadingList(false);
+      onUnreadCountChange(0);
       return;
     }
 
-    if (!background) {
-      setLoadingList(true);
-      setError("");
-    }
+    if (!background) setLoadingList(true);
+    setError("");
 
     const { data: conversationRows, error: conversationError } = await supabase
       .from("conversations")
@@ -143,7 +103,7 @@ export default function MessagesPage({
 
     if (conversationError) {
       console.error("Messages / conversations:", conversationError);
-      if (!background) setError("Impossible de charger les conversations.");
+      setError("Impossible de charger les conversations.");
       setLoadingList(false);
       return;
     }
@@ -153,6 +113,7 @@ export default function MessagesPage({
     if (rawConversations.length === 0) {
       setConversations([]);
       setLoadingList(false);
+      onUnreadCountChange(0);
       return;
     }
 
@@ -181,14 +142,14 @@ export default function MessagesPage({
 
     if (profilesResult.error || presenceResult.error) {
       console.error("Messages / profiles:", profilesResult.error);
-      if (!background) setError("Impossible de charger les profils.");
+      setError("Impossible de charger les profils.");
       setLoadingList(false);
       return;
     }
 
     if (messagesResult.error) {
       console.error("Messages / previews:", messagesResult.error);
-      if (!background) setError("Impossible de charger les derniers messages.");
+      setError("Impossible de charger les derniers messages.");
       setLoadingList(false);
       return;
     }
@@ -240,8 +201,11 @@ export default function MessagesPage({
       });
 
     setConversations(hydrated);
+    onUnreadCountChange(
+      hydrated.reduce((total, conversation) => total + conversation.unread, 0)
+    );
     setLoadingList(false);
-  }, [userId]);
+  }, [userId, onUnreadCountChange]);
 
   const loadFriends = useCallback(async (background = false) => {
     if (!userId) {
@@ -319,36 +283,12 @@ export default function MessagesPage({
     setLoadingFriends(false);
   }, [userId]);
 
-  const loadCallHistory = useCallback(async (background = false) => {
-    if (!userId) {
-      setCallHistory([]);
-      setLoadingCalls(false);
-      return;
-    }
-
-    if (!background) setLoadingCalls(true);
-    const { data, error: callsError } = await supabase.rpc("get_my_direct_call_history_v18", {
-      p_limit: 40,
-    });
-    if (callsError) {
-      console.error("Messages / direct call history:", callsError);
-      setError("Impossible de charger l’historique des appels.");
-    } else {
-      setCallHistory((data ?? []) as DirectCallHistory[]);
-    }
-    setLoadingCalls(false);
-  }, [userId]);
-
   const loadMessages = useCallback(
     async (conversationId: string, background = false) => {
       if (!userId) return;
 
-      const requestId = ++messageRequestIdRef.current;
-
-      if (!background) {
-        setLoadingMessages(true);
-        setError("");
-      }
+      if (!background) setLoadingMessages(true);
+      setError("");
 
       const { data, error: messagesError } = await supabase
         .from("messages")
@@ -358,22 +298,12 @@ export default function MessagesPage({
 
       if (messagesError) {
         console.error("Messages / thread:", messagesError);
-        if (!background) {
-          setError("Impossible de charger cette conversation.");
-          setLoadingMessages(false);
-        }
-        return;
-      }
-
-      if (
-        requestId !== messageRequestIdRef.current ||
-        selectedConversationIdRef.current !== conversationId
-      ) {
+        setError("Impossible de charger cette conversation.");
+        setLoadingMessages(false);
         return;
       }
 
       setMessages((data ?? []) as Message[]);
-      if (!background) setLoadingMessages(false);
 
       const { error: readError } = await supabase.rpc("mark_conversation_read", {
         p_conversation_id: conversationId,
@@ -381,48 +311,19 @@ export default function MessagesPage({
 
       if (readError) console.error("mark_conversation_read:", readError);
 
-      setConversations((current) =>
-        current.map((item) =>
-          item.conversation.id === conversationId ? { ...item, unread: 0 } : item
-        )
-      );
-      void loadConversations(true);
+      setLoadingMessages(false);
+      void loadConversations();
     },
     [userId, loadConversations]
   );
 
   useEffect(() => {
-    let cancelled = false;
-    queueMicrotask(() => {
-      if (!cancelled) void loadConversations();
-    });
-    return () => {
-      cancelled = true;
-    };
+    void loadConversations();
   }, [loadConversations]);
 
   useEffect(() => {
-    let cancelled = false;
-    queueMicrotask(() => {
-      if (!cancelled) void loadFriends();
-    });
-    return () => {
-      cancelled = true;
-    };
+    void loadFriends();
   }, [loadFriends]);
-
-  useEffect(() => {
-    let cancelled = false;
-    queueMicrotask(() => {
-      if (!cancelled) void loadCallHistory();
-    });
-    const refresh = () => void loadCallHistory(true);
-    window.addEventListener("gamemate:direct-call-history-changed", refresh);
-    return () => {
-      cancelled = true;
-      window.removeEventListener("gamemate:direct-call-history-changed", refresh);
-    };
-  }, [loadCallHistory]);
 
 
   useEffect(() => {
@@ -447,8 +348,6 @@ export default function MessagesPage({
 
       const conversation = data as Conversation;
       forceBottomRef.current = true;
-      stickToBottomRef.current = true;
-      selectedConversationIdRef.current = conversation.id;
       setSelectedConversationId(conversation.id);
       onInitialUserHandled();
       await loadConversations();
@@ -471,47 +370,14 @@ export default function MessagesPage({
         "postgres_changes",
         { event: "*", schema: "public", table: "messages" },
         (payload) => {
-          const eventType = payload.eventType;
-          const record = (eventType === "DELETE" ? payload.old : payload.new) as Partial<Message>;
-          const activeConversationId = selectedConversationIdRef.current;
-
-          if (record.id && activeConversationId === record.conversation_id) {
-            setMessages((current) => {
-              if (eventType === "DELETE") {
-                return current.filter((message) => message.id !== record.id);
-              }
-
-              if (eventType === "UPDATE") {
-                return current.map((message) =>
-                  message.id === record.id ? { ...message, ...record } as Message : message
-                );
-              }
-
-              if (!isCompleteMessage(record)) return current;
-              return upsertMessage(current, record);
-            });
-          }
-
-          if (eventType === "INSERT" && isCompleteMessage(record)) {
-            setConversations((current) =>
-              updateConversationPreview(current, record, userId, activeConversationId)
-            );
-          }
+          const message = (payload.new || payload.old) as Partial<Message>;
+          void loadConversations(true);
 
           if (
-            eventType === "INSERT" &&
-            activeConversationId === record.conversation_id &&
-            record.sender_id !== userId &&
-            !record.read_at
+            selectedConversationId &&
+            message.conversation_id === selectedConversationId
           ) {
-            void supabase
-              .rpc("mark_conversation_read", { p_conversation_id: activeConversationId })
-              .then(({ error: readError }) => {
-                if (readError) console.error("mark_conversation_read realtime:", readError);
-                void loadConversations(true);
-              });
-          } else {
-            void loadConversations(true);
+            void loadMessages(selectedConversationId, true);
           }
         }
       )
@@ -525,7 +391,7 @@ export default function MessagesPage({
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [userId, loadConversations]);
+  }, [userId, selectedConversationId, loadConversations, loadMessages]);
 
   useEffect(() => {
     if (!userId) return;
@@ -557,8 +423,6 @@ export default function MessagesPage({
   useEffect(() => {
     const body = threadBodyRef.current;
     if (!body) return;
-
-    if (!forceBottomRef.current && !stickToBottomRef.current) return;
 
     const jumpToBottom = () => {
       body.scrollTop = Math.max(0, body.scrollHeight - body.clientHeight);
@@ -615,8 +479,6 @@ export default function MessagesPage({
 
   async function selectConversation(conversationId: string) {
     forceBottomRef.current = true;
-    stickToBottomRef.current = true;
-    selectedConversationIdRef.current = conversationId;
     setSelectedConversationId(conversationId);
     await loadMessages(conversationId);
   }
@@ -645,7 +507,6 @@ export default function MessagesPage({
 
     const conversation = data as Conversation;
     setSidebarTab("conversations");
-    selectedConversationIdRef.current = conversation.id;
     setSelectedConversationId(conversation.id);
     await loadConversations();
     await loadMessages(conversation.id);
@@ -669,14 +530,13 @@ export default function MessagesPage({
   async function sendMessage() {
     if (!selectedConversationId || !draft.trim() || sending) return;
 
-    const conversationId = selectedConversationId;
     setSending(true);
     setError("");
 
     const body = draft.trim();
 
     const { error: sendError } = await supabase.rpc("send_message", {
-      p_conversation_id: conversationId,
+      p_conversation_id: selectedConversationId,
       p_body: body,
     });
 
@@ -696,10 +556,8 @@ export default function MessagesPage({
     }
 
     setDraft("");
-    forceBottomRef.current = true;
-    stickToBottomRef.current = true;
     playMessageSendSound();
-    await loadMessages(conversationId, true);
+    await loadMessages(selectedConversationId);
     setSending(false);
   }
 
@@ -710,30 +568,6 @@ export default function MessagesPage({
       event.preventDefault();
       void sendMessage();
     }
-  }
-
-  function startDirectCall(targetUserId: string, mode: "audio" | "video" = "audio") {
-    callRequestIdRef.current += 1;
-    const requestId = `call-${callRequestIdRef.current}`;
-    let acknowledged = false;
-    const onAcknowledged = (event: Event) => {
-      const detail = (event as CustomEvent<{ requestId?: string }>).detail;
-      if (detail?.requestId !== requestId) return;
-      acknowledged = true;
-      window.removeEventListener("gamemate:direct-call-ack", onAcknowledged);
-    };
-
-    window.addEventListener("gamemate:direct-call-ack", onAcknowledged);
-    window.dispatchEvent(new CustomEvent("gamemate:start-direct-call", {
-      detail: { userId: targetUserId, mode, requestId },
-    }));
-
-    window.setTimeout(() => {
-      window.removeEventListener("gamemate:direct-call-ack", onAcknowledged);
-      if (!acknowledged) {
-        setError("Le module d’appel n’est pas chargé. Redémarre Companion avec le correctif appels.");
-      }
-    }, 600);
   }
 
   if (!session) {
@@ -759,11 +593,12 @@ export default function MessagesPage({
           <h1>Messages</h1>
         </div>
         <span className="messages-unread-total">
-          {unreadTotal} non lu{unreadTotal > 1 ? "s" : ""}
+          {conversations.reduce((total, conversation) => total + conversation.unread, 0)} non lu
+          {conversations.reduce((total, conversation) => total + conversation.unread, 0) > 1 ? "s" : ""}
         </span>
       </header>
 
-      {error && <div className="messages-error"><span>{error}</span><button type="button" onClick={() => { setError(""); void loadConversations(); void loadFriends(); void loadCallHistory(); if (selectedConversationId) void loadMessages(selectedConversationId); }}>Réessayer</button></div>}
+      {error && <div className="messages-error"><span>{error}</span><button type="button" onClick={() => { setError(""); void loadConversations(); void loadFriends(); if (selectedConversationId) void loadMessages(selectedConversationId); }}>Réessayer</button></div>}
 
       <section className={`messages-layout ${selectedConversation ? "thread-open" : ""}`}>
         <aside className="messages-sidebar">
@@ -783,13 +618,6 @@ export default function MessagesPage({
               >
                 Amis
                 <span>{friends.length}</span>
-              </button>
-              <button
-                type="button"
-                className={sidebarTab === "calls" ? "active" : ""}
-                onClick={() => setSidebarTab("calls")}
-              >
-                Appels
               </button>
             </div>
 
@@ -813,8 +641,7 @@ export default function MessagesPage({
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder={sidebarTab === "friends" ? "Rechercher un ami..." : sidebarTab === "calls" ? "Historique des appels" : "Rechercher une conversation..."}
-              disabled={sidebarTab === "calls"}
+              placeholder={sidebarTab === "friends" ? "Rechercher un ami..." : "Rechercher une conversation..."}
             />
           </div>
 
@@ -839,7 +666,7 @@ export default function MessagesPage({
                 ))
               )}
             </div>
-          ) : sidebarTab === "friends" ? (
+          ) : (
             <div className="messages-friends">
               {loadingFriends ? (
                 <div className="messages-empty">Chargement...</div>
@@ -854,27 +681,10 @@ export default function MessagesPage({
                     key={friend.user_id}
                     friend={friend}
                     onMessage={() => void openFriendConversation(friend.user_id)}
-                    onCall={() => startDirectCall(friend.user_id)}
-                    onVideoCall={() => startDirectCall(friend.user_id, "video")}
                     onProfile={() => onOpenProfile(friend.user_id)}
                   />
                 ))
               )}
-            </div>
-          ) : (
-            <div className="messages-calls">
-              {loadingCalls ? (
-                <div className="messages-empty">Chargement...</div>
-              ) : callHistory.length === 0 ? (
-                <div className="messages-empty"><strong>Aucun appel</strong><p>Tes appels privés apparaîtront ici.</p></div>
-              ) : callHistory.map((item) => (
-                <CallHistoryItem
-                  key={item.call_id}
-                  item={item}
-                  onMessage={() => void openFriendConversation(item.other_user_id)}
-                  onCall={() => startDirectCall(item.other_user_id, item.media_mode)}
-                />
-              ))}
             </div>
           )}
         </aside>
@@ -886,10 +696,7 @@ export default function MessagesPage({
                 <button
                   type="button"
                   className="messages-mobile-back"
-                  onClick={() => {
-                    selectedConversationIdRef.current = null;
-                    setSelectedConversationId(null);
-                  }}
+                  onClick={() => setSelectedConversationId(null)}
                   aria-label="Retour aux conversations"
                 >
                   ←
@@ -909,22 +716,16 @@ export default function MessagesPage({
                   </span>
                 </div>
 
-                <div className="messages-thread-actions">
-                  <button type="button" className="messages-call-btn" onClick={() => startDirectCall(selectedConversation.profile.id)} title="Appeler" aria-label={`Appeler ${profileName(selectedConversation.profile)}`}><Icon name="phone" size={17} /></button>
-                  <button type="button" className="messages-call-btn video" onClick={() => startDirectCall(selectedConversation.profile.id, "video")} title="Appel vidéo" aria-label={`Appeler ${profileName(selectedConversation.profile)} en vidéo`}><Icon name="video" size={17} /></button>
-                  <button type="button" className="messages-profile-btn" onClick={() => onOpenProfile(selectedConversation.profile.id)}>Profil</button>
-                </div>
+                <button
+                  type="button"
+                  className="messages-profile-btn"
+                  onClick={() => onOpenProfile(selectedConversation.profile.id)}
+                >
+                  Profil
+                </button>
               </header>
 
-              <div
-                className="messages-thread-body"
-                ref={threadBodyRef}
-                onScroll={(event) => {
-                  const body = event.currentTarget;
-                  stickToBottomRef.current =
-                    body.scrollHeight - body.scrollTop - body.clientHeight < 96;
-                }}
-              >
+              <div className="messages-thread-body" ref={threadBodyRef}>
                 {loadingMessages ? (
                   <div className="messages-thread-empty">Chargement...</div>
                 ) : messages.length === 0 ? (
@@ -973,7 +774,7 @@ export default function MessagesPage({
                   onClick={() => void sendMessage()}
                   aria-label="Envoyer"
                 >
-                  <Icon name="send" size={18} />
+                  ➤
                 </button>
               </footer>
             </>
@@ -993,14 +794,10 @@ export default function MessagesPage({
 function FriendItem({
   friend,
   onMessage,
-  onCall,
-  onVideoCall,
   onProfile,
 }: {
   friend: FriendWithPresence;
   onMessage: () => void;
-  onCall: () => void;
-  onVideoCall: () => void;
   onProfile: () => void;
 }) {
   return (
@@ -1021,34 +818,11 @@ function FriendItem({
         <button type="button" onClick={onMessage} title="Envoyer un message" aria-label="Envoyer un message">
           <Icon name="message-circle" size={16} />
         </button>
-        <button type="button" onClick={onCall} title="Appeler" aria-label={`Appeler ${profileName(friend.profile)}`}>
-          <Icon name="phone" size={16} />
-        </button>
-        <button type="button" onClick={onVideoCall} title="Appel vidéo" aria-label={`Appeler ${profileName(friend.profile)} en vidéo`}>
-          <Icon name="video" size={16} />
-        </button>
         <button type="button" onClick={onProfile} title="Voir le profil" aria-label="Voir le profil">
           <Icon name="more-horizontal" size={17} />
         </button>
       </div>
     </div>
-  );
-}
-
-function CallHistoryItem({ item, onMessage, onCall }: { item: DirectCallHistory; onMessage: () => void; onCall: () => void }) {
-  const name = item.other_display_name || item.other_username || "Joueur GameMate";
-  const missed = item.status === "missed" && item.direction === "incoming";
-  return (
-    <article className={`messages-call-item ${missed ? "missed" : ""}`}>
-      <button type="button" className="messages-call-main" onClick={onMessage}>
-        <span className="messages-avatar small">{item.other_avatar_url ? <img src={item.other_avatar_url} alt={name} /> : name.slice(0, 1).toUpperCase()}</span>
-        <span className="messages-call-copy">
-          <strong>{name}</strong>
-          <small><Icon name={item.direction === "incoming" ? "arrow-left" : "arrow-right"} size={12} />{callHistoryLabel(item)} · {formatRelativeTime(item.started_at)}</small>
-        </span>
-      </button>
-      <button type="button" className="messages-call-back" onClick={onCall} title="Rappeler" aria-label={`Rappeler ${name}`}><Icon name={item.media_mode === "video" ? "video" : "phone"} size={16} /></button>
-    </article>
   );
 }
 
@@ -1142,61 +916,6 @@ function Avatar({
   );
 }
 
-function isCompleteMessage(message: Partial<Message>): message is Message {
-  return (
-    typeof message.id === "string" &&
-    typeof message.conversation_id === "string" &&
-    typeof message.sender_id === "string" &&
-    typeof message.body === "string" &&
-    typeof message.created_at === "string" &&
-    (typeof message.read_at === "string" || message.read_at === null)
-  );
-}
-
-function upsertMessage(current: Message[], incoming: Message) {
-  const existingIndex = current.findIndex((message) => message.id === incoming.id);
-  const next = [...current];
-
-  if (existingIndex >= 0) next[existingIndex] = incoming;
-  else next.push(incoming);
-
-  return next.sort(
-    (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-  );
-}
-
-function updateConversationPreview(
-  current: ConversationView[],
-  incoming: Message,
-  currentUserId: string,
-  activeConversationId: string | null
-) {
-  return current
-    .map((item) => {
-      if (item.conversation.id !== incoming.conversation_id) return item;
-
-      const isActive = activeConversationId === incoming.conversation_id;
-      const isUnreadIncoming =
-        incoming.sender_id !== currentUserId && !incoming.read_at && !isActive;
-      const currentLastDate = item.lastMessage?.created_at ?? item.conversation.updated_at;
-      const isLatest =
-        new Date(incoming.created_at).getTime() >= new Date(currentLastDate).getTime();
-
-      return {
-        ...item,
-        lastMessage: isLatest ? incoming : item.lastMessage,
-        unread: isActive
-          ? 0
-          : item.unread + (isUnreadIncoming ? 1 : 0),
-      };
-    })
-    .sort((a, b) => {
-      const aDate = a.lastMessage?.created_at ?? a.conversation.updated_at;
-      const bDate = b.lastMessage?.created_at ?? b.conversation.updated_at;
-      return new Date(bDate).getTime() - new Date(aDate).getTime();
-    });
-}
-
 function profileName(profile: Profile) {
   return profile.display_name || profile.username || "Joueur GameMate";
 }
@@ -1207,23 +926,6 @@ function offlinePresence(userId: string): PresenceSnapshot {
 
 function presenceRank(status: PresenceStatus) {
   return status === "online" ? 0 : status === "away" ? 1 : status === "dnd" ? 2 : 3;
-}
-
-function callHistoryLabel(call: DirectCallHistory) {
-  const kind = call.media_mode === "video" ? "Vidéo" : "Appel";
-  if (call.status === "ringing") return call.direction === "incoming" ? `${kind} entrant` : `${kind} en cours`;
-  if (call.status === "missed") return call.direction === "incoming" ? `${kind} manqué` : "Sans réponse";
-  if (call.status === "declined") return call.direction === "incoming" ? `${kind} refusé` : "Refusé";
-  if (call.status === "cancelled") return `${kind} annulé`;
-  if (call.status === "active") return `${kind} en cours`;
-  if (call.duration_seconds > 0) return `${kind} · ${formatCallDuration(call.duration_seconds)}`;
-  return `${kind} terminé`;
-}
-
-function formatCallDuration(totalSeconds: number) {
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return minutes > 0 ? `${minutes} min ${seconds.toString().padStart(2, "0")} s` : `${seconds} s`;
 }
 
 function shortTime(value: string) {
@@ -1259,3 +961,4 @@ function formatRelativeTime(value: string) {
     month: "2-digit",
   }).format(date);
 }
+

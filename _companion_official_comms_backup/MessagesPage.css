@@ -950,15 +950,3 @@
 .prc-notice.error button:hover,
 .support-error button:hover,
 .fmx-error button:hover { background: rgba(255, 255, 255, .14); }
-
-/* Companion V16 — appels privés */
-.messages-sidebar-tabs button{flex:1;justify-content:center;padding-inline:7px}
-.messages-search input:disabled{cursor:default;opacity:.72}
-.messages-thread-actions{display:flex;align-items:center;gap:6px}
-.messages-call-btn{display:grid;width:33px;height:33px;place-items:center;border:1px solid rgba(51,211,165,.35);border-radius:8px;background:rgba(29,139,108,.12);color:#58dfb7;cursor:pointer}.messages-call-btn:hover{border-color:rgba(51,225,172,.7);background:rgba(29,139,108,.22);color:#83f0cf}
-.messages-call-btn.video{border-color:rgba(92,132,255,.38);background:rgba(54,76,164,.14);color:#9fbaff}.messages-call-btn.video:hover{border-color:rgba(113,151,255,.74);background:rgba(54,76,164,.26);color:#c3d3ff}
-.messages-calls{min-height:0;flex:1;overflow-y:auto}.messages-calls::-webkit-scrollbar{width:6px}.messages-calls::-webkit-scrollbar-thumb{border-radius:999px;background:#17364f}
-.messages-call-item{display:flex;min-height:64px;align-items:center;gap:7px;border-bottom:1px solid rgba(34,77,111,.2);padding:7px 8px}.messages-call-item:hover{background:#081c2e}.messages-call-item.missed .messages-call-copy strong,.messages-call-item.missed .messages-call-copy small{color:#ff829b}
-.messages-call-main{display:flex;min-width:0;flex:1;align-items:center;gap:9px;border:0;padding:0;background:transparent;color:#eef5ff;text-align:left;cursor:pointer}.messages-call-copy{display:flex;min-width:0;flex-direction:column;gap:4px}.messages-call-copy strong{overflow:hidden;font-size:10px;text-overflow:ellipsis;white-space:nowrap}.messages-call-copy small{display:flex;align-items:center;gap:4px;color:#71869f;font-size:7px;white-space:nowrap}
-.messages-call-back{display:grid;width:30px;height:30px;flex:0 0 30px;place-items:center;border:1px solid rgba(52,198,157,.28);border-radius:8px;background:rgba(20,111,87,.1);color:#50d8b0;cursor:pointer}.messages-call-back:hover{border-color:rgba(52,218,169,.6);background:rgba(20,111,87,.2);color:#7aefcd}
-@media(max-width:680px){.messages-thread-actions{margin-left:auto}.messages-call-btn{width:31px;height:31px}.messages-sidebar-tabs button{font-size:7px}}

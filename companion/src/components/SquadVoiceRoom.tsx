@@ -7,6 +7,7 @@ import {
   friendlyMediaError,
   readAudioDevicePreferences,
 } from "../lib/mediaDevices";
+import { createRtcConfig, supportsVoiceCalls } from "../lib/webrtc";
 import { Icon } from "./Icon";
 
 export type SquadMember = {
@@ -70,29 +71,6 @@ type Props = {
   onStateChange?: (snapshot: VoiceSessionSnapshot | null) => void;
 };
 
-function createRtcConfig(): RTCConfiguration {
-  const environment = (import.meta as ImportMeta & {
-    env?: Record<string, string | undefined>;
-  }).env;
-  const turnUrls = environment?.VITE_WEBRTC_TURN_URLS
-    ?.split(",")
-    .map((value: string) => value.trim())
-    .filter(Boolean);
-  const iceServers: RTCIceServer[] = [
-    { urls: "stun:stun.l.google.com:19302" },
-  ];
-
-  if (turnUrls?.length) {
-    iceServers.push({
-      urls: turnUrls,
-      username: environment?.VITE_WEBRTC_TURN_USERNAME,
-      credential: environment?.VITE_WEBRTC_TURN_CREDENTIAL,
-    });
-  }
-
-  return { iceServers, iceCandidatePoolSize: 4 };
-}
-
 export default function SquadVoiceRoom({
   squadId,
   channelId,
@@ -126,10 +104,7 @@ export default function SquadVoiceRoom({
 
   const me = members.find((member) => member.user_id === currentUserId);
   const myName = me?.display_name || me?.username || "Joueur";
-  const supported = Boolean(
-    typeof RTCPeerConnection === "function" &&
-    typeof navigator.mediaDevices?.getUserMedia === "function"
-  );
+  const supported = supportsVoiceCalls();
 
   const sendBroadcast = useCallback((event: string, payload: unknown) => {
     const channel = channelRef.current;

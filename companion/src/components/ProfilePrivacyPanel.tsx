@@ -14,6 +14,7 @@ type PrivacySettings = {
   show_last_seen: boolean;
   allow_friend_requests: boolean;
   allow_squad_invites: boolean;
+  allow_direct_calls: boolean;
 };
 
 const defaultSettings: PrivacySettings = {
@@ -27,6 +28,7 @@ const defaultSettings: PrivacySettings = {
   show_last_seen: true,
   allow_friend_requests: true,
   allow_squad_invites: true,
+  allow_direct_calls: true,
 };
 
 const visibilityRows: Array<{
@@ -53,6 +55,7 @@ const interactionRows: Array<{
 }> = [
   { key: "allow_friend_requests", title: "Demandes d’ami", description: "Autorise les joueurs à t’envoyer une demande depuis ton profil.", icon: "user-plus" },
   { key: "allow_squad_invites", title: "Invitations de squad", description: "Autorise les chefs de squad à t’inviter depuis ton profil.", icon: "users" },
+  { key: "allow_direct_calls", title: "Appels vocaux privés", description: "Autorise tes amis à t’appeler directement depuis vos messages.", icon: "phone" },
 ];
 
 export default function ProfilePrivacyPanel() {
@@ -86,6 +89,7 @@ export default function ProfilePrivacyPanel() {
           show_last_seen: row.show_last_seen ?? true,
           allow_friend_requests: row.allow_friend_requests ?? true,
           allow_squad_invites: row.allow_squad_invites ?? true,
+          allow_direct_calls: row.allow_direct_calls ?? true,
         });
       }
       setLoading(false);
@@ -107,7 +111,7 @@ export default function ProfilePrivacyPanel() {
     setFeedback("");
     setError("");
 
-    const { error: saveError } = await supabase.rpc("update_my_profile_privacy_v15", {
+    const { error: saveError } = await supabase.rpc("update_my_profile_privacy_v16", {
       p_show_bio: settings.show_bio,
       p_show_region: settings.show_region,
       p_show_language: settings.show_language,
@@ -118,6 +122,7 @@ export default function ProfilePrivacyPanel() {
       p_show_last_seen: settings.show_last_seen,
       p_allow_friend_requests: settings.allow_friend_requests,
       p_allow_squad_invites: settings.allow_squad_invites,
+      p_allow_direct_calls: settings.allow_direct_calls,
     });
 
     if (saveError) {

@@ -1,4 +1,4 @@
-import FindMatesScreen from "./pages/FindMatesPage";
+﻿import FindMatesScreen from "./pages/FindMatesPage";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -14,9 +14,8 @@ import MessagesPage from "./pages/MessagesPage";
 import TestModePage from "./pages/TestModePage";
 import SettingsPage, { type AppearanceSettings } from "./pages/SettingsPage";
 import SupportPage from "./pages/SupportPage";
-import NotificationCenter from "./components/NotificationCenter";
+
 import type { VoiceSessionSnapshot } from "./components/SquadVoiceRoom";
-import DirectCallManager from "./components/DirectCallManager";
 import HomeDashboard from "./components/HomeDashboard";
 import { Icon, type IconName } from "./components/Icon";
 import { presenceLabel, presenceStorageKeys, readPresenceCustomStatus, readPresenceStatus, type OwnPresenceStatus } from "./lib/presence";
@@ -183,6 +182,7 @@ function App() {
   const [publicProfileUserId, setPublicProfileUserId] = useState<string | null>(null);
   const [pendingFriendRequests, setPendingFriendRequests] = useState(0);
   const [unreadMessages, setUnreadMessages] = useState(0);
+  const [squadNotifications, setSquadNotifications] = useState(0);
   const [openSupportTickets, setOpenSupportTickets] = useState(0);
   const [messageTargetUserId, setMessageTargetUserId] = useState<string | null>(null);
   const [email, setEmail] = useState("");
@@ -703,6 +703,58 @@ function App() {
 
   useEffect(() => {
     if (!session?.user?.id) {
+      setSquadNotifications(0);
+      return;
+    }
+
+    const userId = session.user.id;
+    let mounted = true;
+
+    async function loadSquadNotifications() {
+      const [invites, sessions, scheduled] = await Promise.all([
+        supabase
+          .from("squad_invites")
+          .select("id", { count: "exact", head: true })
+          .eq("recipient_id", userId)
+          .eq("status", "pending"),
+        supabase
+          .from("squad_session_notifications")
+          .select("id", { count: "exact", head: true })
+          .eq("recipient_id", userId)
+          .is("read_at", null),
+        supabase
+          .from("squad_scheduled_session_notifications")
+          .select("id", { count: "exact", head: true })
+          .eq("recipient_id", userId)
+          .is("read_at", null),
+      ]);
+
+      if (!mounted) return;
+
+      setSquadNotifications(
+        (invites.error ? 0 : invites.count ?? 0) +
+        (sessions.error ? 0 : sessions.count ?? 0) +
+        (scheduled.error ? 0 : scheduled.count ?? 0)
+      );
+    }
+
+    void loadSquadNotifications();
+
+    const channel = supabase
+      .channel(`squad-badge:${userId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "squad_invites" }, () => void loadSquadNotifications())
+      .on("postgres_changes", { event: "*", schema: "public", table: "squad_session_notifications" }, () => void loadSquadNotifications())
+      .on("postgres_changes", { event: "*", schema: "public", table: "squad_scheduled_session_notifications" }, () => void loadSquadNotifications())
+      .subscribe();
+
+    return () => {
+      mounted = false;
+      void supabase.removeChannel(channel);
+    };
+  }, [session?.user?.id]);
+
+  useEffect(() => {
+    if (!session?.user?.id) {
       setModerationState(EMPTY_MODERATION_STATE);
       return;
     }
@@ -887,7 +939,7 @@ function App() {
 
             <div className="gm-nav-group">
               <span className="gm-nav-label">SOCIAL</span>
-              <NavItem active={section === "squads"} icon="users" label="Squads" onClick={() => navigateTo("squads")} />
+              <NavItem active={section === "squads"} icon="users" label="Squads" badge={notificationBadges ? squadNotifications : 0} onClick={() => navigateTo("squads")} />
               <NavItem active={section === "friends"} icon="user-check" label="Amis" badge={notificationBadges ? pendingFriendRequests : 0} onClick={() => navigateTo("friends")} />
               <NavItem
                 active={section === "messages"}
@@ -975,17 +1027,6 @@ function App() {
                 {notificationBadges && unreadMessages > 0 && <b>{unreadMessages > 99 ? "99+" : unreadMessages}</b>}
               </button>
 
-              <NotificationCenter
-                session={session}
-                totalCount={notificationBadges ? pendingFriendRequests + unreadMessages : 0}
-                onOpenFriends={() => navigateTo("friends")}
-                onOpenMessage={(userId) => {
-                  setMessageTargetUserId(userId);
-                  navigateTo("messages");
-                }}
-                onOpenSquads={() => navigateTo("squads")}
-                onOpenFindMates={() => navigateTo("mates")}
-              />
 
               <button
                 type="button"
@@ -1221,17 +1262,6 @@ function App() {
           }}
         />
       )}
-
-      {/* Hôte global : doit rester monté sur toutes les pages pour recevoir les actions d’appel. */}
-      <DirectCallManager
-        key="gamemate-global-direct-call-host"
-        session={session}
-        squadVoiceActive={Boolean(voiceSession)}
-        onOpenMessages={(userId) => {
-          setMessageTargetUserId(userId);
-          navigateTo("messages");
-        }}
-      />
 
       {session && moderationState.restricted && blockingSanction && section !== "support" && (
         <div className="gm-sanction-lock">
@@ -1874,3 +1904,4 @@ function VoiceSessionDock({
     </aside>
   );
 }
+

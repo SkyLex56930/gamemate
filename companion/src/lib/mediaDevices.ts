@@ -62,7 +62,7 @@ export function createMicrophoneConstraints(
   };
 }
 
-type AudioElementWithSink = HTMLAudioElement & {
+type MediaElementWithSink = HTMLMediaElement & {
   setSinkId?: (sinkId: string) => Promise<void>;
 };
 
@@ -72,8 +72,8 @@ export function supportsAudioOutputSelection() {
   }).setSinkId === "function";
 }
 
-export async function applyPreferredOutput(audio: HTMLAudioElement) {
-  const target = audio as AudioElementWithSink;
+export async function applyPreferredOutput(media: HTMLMediaElement) {
+  const target = media as MediaElementWithSink;
   if (!target.setSinkId) return false;
 
   const { outputDeviceId } = readAudioDevicePreferences();

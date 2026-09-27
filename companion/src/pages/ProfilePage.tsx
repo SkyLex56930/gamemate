@@ -974,36 +974,13 @@ function ProfileSetup({
   }
 
   function addGame() {
-  const game = gameCatalog.find(
-    (item) => String(item.id) === String(newGameId)
-  );
-
-  const platform = platformCatalog.find(
-    (item) => String(item.id) === String(newPlatformId)
-  );
-
-  if (!game || !platform) {
-    return;
-  }
-
-  const gameId = String(game.id);
-  const platformId = String(platform.id);
-
-  if (
-    gameDrafts.some(
-      (item) =>
-        String(item.game_id) === gameId &&
-        String(item.platform_id) === platformId
-    )
-  ) {
-    return;
-  }
-
-  onGameDraftsChange([
-    ...gameDrafts,
-    {
-      game_id: gameId,
-      platform_id: platformId,
+    const game = gameCatalog.find((item) => item.id === newGameId);
+    const platform = platformCatalog.find((item) => item.id === newPlatformId);
+    if (!game || !platform) return;
+    if (gameDrafts.some((item) => item.game_id === game.id && item.platform_id === platform.id)) return;
+    onGameDraftsChange([...gameDrafts, {
+      game_id: game.id,
+      platform_id: platform.id,
       gameName: game.name,
       platformName: platform.name,
       is_primary: gameDrafts.length === 0,
@@ -1018,12 +995,10 @@ function ProfileSetup({
       draftMic: true,
       draftCrossplay: true,
       draftPrimary: gameDrafts.length === 0,
-    },
-  ]);
-
-  setNewGameId("");
-  setNewPlatformId("");
-}
+    }]);
+    setNewGameId("");
+    setNewPlatformId("");
+  }
 
   function removeGame(index: number) {
     const next = gameDrafts.filter((_, gameIndex) => gameIndex !== index);
