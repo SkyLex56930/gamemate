@@ -11,6 +11,7 @@ import {
 
 import type { Session } from "@supabase/supabase-js";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { supabase } from "../lib/supabase";
 import { theme } from "../theme/theme";
@@ -30,6 +31,7 @@ export function DiscoverScreen({
   session: Session;
   onMessage?: (userId: string) => void;
 }) {
+  const insets = useSafeAreaInsets();
   const [query, setQuery] = useState("");
   const [players, setPlayers] = useState<Player[]>([]);
   const [loading, setLoading] = useState(false);
@@ -102,7 +104,7 @@ export function DiscoverScreen({
 
   return (
     <ScrollView
-      contentContainerStyle={styles.page}
+      contentContainerStyle={[styles.page, { paddingBottom: insets.bottom + 110 }]}
       keyboardShouldPersistTaps="handled"
     >
       <Text style={styles.kicker}>DÉCOUVERTE</Text>
@@ -215,7 +217,6 @@ export function DiscoverScreen({
 const styles = StyleSheet.create({
   page: {
     padding: 20,
-    paddingBottom: 120,
     gap: 12,
     backgroundColor: theme.colors.background,
   },

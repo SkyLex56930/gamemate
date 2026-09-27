@@ -3,13 +3,15 @@
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Platform,
   StatusBar,
   StyleSheet,
   View,
 } from "react-native";
 
 import type { Session } from "@supabase/supabase-js";
-import { SafeAreaProvider } from "react-native-safe-area-context";
+import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
+import { NavigationBar } from "expo-navigation-bar";
 
 import { supabase } from "./src/lib/supabase";
 import { startMobilePresence, stopMobilePresence } from "./src/lib/presence";
@@ -61,22 +63,28 @@ export default function App() {
       <StatusBar
         barStyle="light-content"
         backgroundColor={theme.colors.background}
+        hidden={Platform.OS === "android"}
       />
-
-      {loading ? (
-        <View style={styles.loading}>
-          <ActivityIndicator size="large" />
-        </View>
-      ) : session ? (
-        <AppNavigator session={session} />
-      ) : (
-        <LoginScreen />
-      )}
+      {Platform.OS === "android" && <NavigationBar hidden />}
+      <SafeAreaView style={styles.root} edges={["top"]}>
+        {loading ? (
+          <View style={styles.loading}>
+            <ActivityIndicator size="large" />
+          </View>
+        ) : session ? (
+          <AppNavigator session={session} />
+        ) : (
+          <SafeAreaView style={styles.root} edges={["bottom"]}>
+            <LoginScreen />
+          </SafeAreaView>
+        )}
+      </SafeAreaView>
     </SafeAreaProvider>
   );
 }
 
 const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: theme.colors.background },
   loading: {
     flex: 1,
     justifyContent: "center",

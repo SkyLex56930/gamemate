@@ -3,12 +3,14 @@ import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-
 import type { Session } from "@supabase/supabase-js";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { Avatar } from "../components/Avatar";
 import { supabase } from "../lib/supabase";
 import { theme } from "../theme/theme";
 
 export function ProfileScreen({ session }: { session: Session }) {
+  const insets = useSafeAreaInsets();
   const [displayName, setDisplayName] = useState("");
   const [username, setUsername] = useState("");
   const [bio, setBio] = useState("");
@@ -50,7 +52,7 @@ export function ProfileScreen({ session }: { session: Session }) {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.page}>
+    <ScrollView contentContainerStyle={[styles.page, { paddingBottom: insets.bottom + 110 }]}>
       <View style={styles.banner} />
 
       <View style={styles.avatar}>
@@ -107,7 +109,6 @@ export function ProfileScreen({ session }: { session: Session }) {
 
 const styles = StyleSheet.create({
   page: {
-    paddingBottom: 120,
     backgroundColor: theme.colors.background,
   },
   banner: {

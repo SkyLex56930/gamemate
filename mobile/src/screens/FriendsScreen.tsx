@@ -2,6 +2,7 @@
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import type { Session } from "@supabase/supabase-js";
 import { Ionicons } from "@expo/vector-icons";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { supabase } from "../lib/supabase";
 import { theme } from "../theme/theme";
@@ -13,6 +14,7 @@ type Friend = {
 };
 
 export function FriendsScreen({ session, onMessage }: { session: Session; onMessage: (userId: string) => void }) {
+  const insets = useSafeAreaInsets();
   const [friends, setFriends] = useState<Friend[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -61,7 +63,7 @@ export function FriendsScreen({ session, onMessage }: { session: Session; onMess
   }, [load]);
 
   return (
-    <ScrollView contentContainerStyle={styles.page}>
+    <ScrollView contentContainerStyle={[styles.page, { paddingBottom: insets.bottom + 110 }]}>
       <Text style={styles.kicker}>SOCIAL</Text>
       <Text style={styles.title}>Amis</Text>
 
@@ -100,7 +102,6 @@ export function FriendsScreen({ session, onMessage }: { session: Session; onMess
 const styles = StyleSheet.create({
   page: {
     padding: 20,
-    paddingBottom: 120,
     gap: 12,
     backgroundColor: theme.colors.background,
   },

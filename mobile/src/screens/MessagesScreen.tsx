@@ -4,6 +4,7 @@ import { Ionicons } from "@expo/vector-icons";
 import type { Session } from "@supabase/supabase-js";
 import { useFocusEffect } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Avatar } from "../components/Avatar";
 import { chatName, getConversations, type ConversationItem } from "../lib/messages";
 import { supabase } from "../lib/supabase";
@@ -16,6 +17,7 @@ type Props = NativeStackScreenProps<MessagesStackParamList, "Conversations"> & {
 };
 
 export function MessagesScreen({ session, navigation, onUnreadChange }: Props) {
+  const insets = useSafeAreaInsets();
   const [items, setItems] = useState<ConversationItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -51,7 +53,7 @@ export function MessagesScreen({ session, navigation, onUnreadChange }: Props) {
     <FlatList
       data={items}
       keyExtractor={(item) => item.conversation.id}
-      contentContainerStyle={styles.list}
+      contentContainerStyle={[styles.list, { paddingBottom: insets.bottom + 110 }]}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => {
         setRefreshing(true);
         void load();
@@ -91,7 +93,7 @@ export function MessagesScreen({ session, navigation, onUnreadChange }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.colors.background },
-  list: { flexGrow: 1, paddingHorizontal: 18, paddingTop: 22, paddingBottom: 110 },
+  list: { flexGrow: 1, paddingHorizontal: 18, paddingTop: 22 },
   heading: { marginBottom: 18, gap: 5 },
   kicker: { color: theme.colors.cyan, fontSize: 10, fontWeight: "800", letterSpacing: 1.5 },
   title: { color: theme.colors.text, fontSize: 29, fontWeight: "800" },

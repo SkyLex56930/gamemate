@@ -3,6 +3,7 @@ import { ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, Pressable,
 import { Ionicons } from "@expo/vector-icons";
 import type { Session } from "@supabase/supabase-js";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { Avatar } from "../components/Avatar";
 import { chatName, getMessages, markRead, sendMessage, type Message } from "../lib/messages";
 import { supabase } from "../lib/supabase";
@@ -68,7 +69,8 @@ export function ChatScreen({ session, navigation, route }: Props) {
     }
   }
 
-  return <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+  return <SafeAreaView style={styles.root} edges={["bottom"]}>
+    <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === "ios" ? "padding" : undefined}>
     <View style={styles.header}>
       <Pressable onPress={() => navigation.goBack()} accessibilityLabel="Retour aux conversations" style={styles.back}>
         <Ionicons name="arrow-back" size={23} color={theme.colors.text} />
@@ -98,7 +100,8 @@ export function ChatScreen({ session, navigation, route }: Props) {
         <Ionicons name="send" size={19} color="#FFFFFF" />
       </Pressable>
     </View>
-  </KeyboardAvoidingView>;
+    </KeyboardAvoidingView>
+  </SafeAreaView>;
 }
 
 const styles = StyleSheet.create({
@@ -118,7 +121,7 @@ const styles = StyleSheet.create({
   time: { color: "#D3D6F7", fontSize: 10, alignSelf: "flex-end", marginTop: 3 },
   errorBox: { padding: 8 },
   error: { color: theme.colors.danger, textAlign: "center" },
-  composer: { flexDirection: "row", alignItems: "flex-end", gap: 10, padding: 12, backgroundColor: theme.colors.surface, borderTopWidth: 1, borderTopColor: theme.colors.border },
+  composer: { flexDirection: "row", alignItems: "flex-end", gap: 10, paddingHorizontal: 12, paddingTop: 12, paddingBottom: 18, backgroundColor: theme.colors.surface, borderTopWidth: 1, borderTopColor: theme.colors.border },
   input: { flex: 1, minHeight: 42, maxHeight: 125, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 18, backgroundColor: theme.colors.surfaceHover, color: theme.colors.text, fontSize: 14 },
   send: { width: 42, height: 42, borderRadius: 21, alignItems: "center", justifyContent: "center", backgroundColor: theme.colors.primary },
   disabled: { opacity: 0.5 },

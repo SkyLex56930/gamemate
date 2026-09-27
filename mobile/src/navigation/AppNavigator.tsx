@@ -116,7 +116,7 @@ export function AppNavigator({ session }: { session: Session }) {
       tabBarStyle: getFocusedRouteNameFromRoute(route) === "Chat"
         ? { display: "none" }
         : {
-          position: "absolute", left: 16, right: 16, bottom: Math.max(insets.bottom, 10),
+          position: "absolute", left: 16, right: 16, bottom: Math.max(insets.bottom, 16),
           height: 64, paddingTop: 7, paddingBottom: 7, borderTopWidth: 0,
           borderRadius: 22, backgroundColor: theme.colors.surface,
           elevation: 16, shadowColor: "#000000", shadowOpacity: 0.28,

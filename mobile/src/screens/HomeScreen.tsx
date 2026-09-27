@@ -64,7 +64,7 @@ export function HomeScreen({ session, onNavigate, onOpenConversation, onUnreadCh
   const name = profile?.display_name || profile?.username || "Joueur";
 
   return <View style={styles.root}>
-    <ScrollView contentContainerStyle={[styles.page, { paddingTop: Math.max(insets.top, 12) }]}
+    <ScrollView contentContainerStyle={[styles.page, { paddingBottom: insets.bottom + 110 }]}
       showsVerticalScrollIndicator={false}>
       {profileLoading && !summary ? <ActivityIndicator style={styles.loading} color={theme.colors.primary} /> :
         profileError && !summary ? <Pressable style={styles.retry} onPress={() => void loadProfile()}>
@@ -165,7 +165,7 @@ export function HomeScreen({ session, onNavigate, onOpenConversation, onUnreadCh
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: theme.colors.background },
-  page: { paddingHorizontal: 18, paddingBottom: 115 },
+  page: { paddingHorizontal: 18, paddingTop: 12 },
   loading: { marginVertical: 65 },
   retry: { padding: 24, borderRadius: 16, backgroundColor: theme.colors.surface },
   retryText: { color: theme.colors.danger },
