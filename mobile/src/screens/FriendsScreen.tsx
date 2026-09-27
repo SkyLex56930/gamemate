@@ -1,5 +1,5 @@
-﻿import { useEffect, useState } from "react";
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
+﻿import { useCallback, useEffect, useState } from "react";
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import type { Session } from "@supabase/supabase-js";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -12,22 +12,24 @@ type Friend = {
   display_name: string | null;
 };
 
-export function FriendsScreen({ session }: { session: Session }) {
+export function FriendsScreen({ session, onMessage }: { session: Session; onMessage: (userId: string) => void }) {
   const [friends, setFriends] = useState<Friend[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    void load();
-  }, [session.user.id]);
-
-  async function load() {
+  const load = useCallback(async () => {
     const uid = session.user.id;
 
-    const { data: relations } = await supabase
+    const { data: relations, error: relationsError } = await supabase
       .from("friendships")
       .select("requester_id,addressee_id")
       .eq("status", "accepted")
       .or(`requester_id.eq.${uid},addressee_id.eq.${uid}`);
+
+    if (relationsError) {
+      console.error("Amis / relations:", relationsError);
+      setLoading(false);
+      return;
+    }
 
     const ids = Array.from(
       new Set(
@@ -50,7 +52,13 @@ export function FriendsScreen({ session }: { session: Session }) {
 
     setFriends((data ?? []) as Friend[]);
     setLoading(false);
-  }
+  }, [session.user.id]);
+
+  useEffect(() => {
+    let active = true;
+    queueMicrotask(() => { if (active) void load(); });
+    return () => { active = false; };
+  }, [load]);
 
   return (
     <ScrollView contentContainerStyle={styles.page}>
@@ -66,7 +74,8 @@ export function FriendsScreen({ session }: { session: Session }) {
         </View>
       ) : (
         friends.map((friend) => (
-          <View key={friend.id} style={styles.card}>
+          <Pressable key={friend.id} style={styles.card} onPress={() => onMessage(friend.id)}
+            accessibilityRole="button" accessibilityLabel={`Écrire à ${friend.display_name || friend.username || "Joueur"}`}>
             <View style={styles.avatar}>
               <Text style={styles.avatarText}>
                 {(friend.display_name || friend.username || "G").slice(0, 1).toUpperCase()}
@@ -81,7 +90,7 @@ export function FriendsScreen({ session }: { session: Session }) {
             </View>
 
             <Ionicons name="chatbubble-outline" size={21} color={theme.colors.cyan} />
-          </View>
+          </Pressable>
         ))
       )}
     </ScrollView>

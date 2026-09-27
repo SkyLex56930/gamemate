@@ -43,6 +43,9 @@
   "companion/**/*",
 
   "launcher",
-  "launcher/**/*"
+  "launcher/**/*",
+
+  "mobile",
+  "mobile/**/*"
 ]
 }

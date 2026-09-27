@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from "react";
+﻿import { useCallback, useEffect, useState } from "react";
 import {
   Pressable,
   ScrollView,
@@ -9,10 +9,12 @@ import {
 
 import type { Session } from "@supabase/supabase-js";
 import { Ionicons } from "@expo/vector-icons";
+import { useFocusEffect } from "@react-navigation/native";
 
 import { supabase } from "../lib/supabase";
 import { theme } from "../theme/theme";
 import { Avatar } from "../components/Avatar";
+import { chatName, getConversations, type ConversationItem } from "../lib/messages";
 
 type ShortcutProps = {
   icon: keyof typeof Ionicons.glyphMap;
@@ -23,10 +25,35 @@ type ShortcutProps = {
 
 export function HomeScreen({
   session,
+  onNavigate,
+  onOpenConversation,
+  onUnreadChange,
 }: {
   session: Session;
+  onNavigate: (tab: "Messages" | "Amis" | "Mates") => void;
+  onOpenConversation: (item: ConversationItem) => void;
+  onUnreadChange: (count: number) => void;
 }) {
   const [name, setName] = useState("Joueur");
+  const [recent, setRecent] = useState<ConversationItem[]>([]);
+  const loadRecent = useCallback(async () => {
+    try {
+      const conversations = await getConversations(session.user.id);
+      setRecent(conversations.slice(0, 3));
+      onUnreadChange(conversations.reduce((count, item) => count + item.unread, 0));
+    } catch (error) {
+      console.error("Accueil / conversations:", error);
+    }
+  }, [session.user.id, onUnreadChange]);
+
+  useFocusEffect(useCallback(() => { void loadRecent(); }, [loadRecent]));
+
+  useEffect(() => {
+    const channel = supabase.channel(`mobile-home-messages-${session.user.id}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "messages" }, () => void loadRecent())
+      .subscribe();
+    return () => { void supabase.removeChannel(channel); };
+  }, [session.user.id, loadRecent]);
 
   useEffect(() => {
     void supabase
@@ -62,7 +89,7 @@ export function HomeScreen({
             </Text>
           </View>
 
-          <Pressable style={styles.headerAction}>
+          <Pressable style={styles.headerAction} onPress={() => onNavigate("Messages")} accessibilityLabel="Ouvrir les messages">
             <Ionicons
               name="chatbubble-ellipses-outline"
               size={22}
@@ -82,11 +109,13 @@ export function HomeScreen({
             icon="chatbubble"
             label="Messages"
             active
+            onPress={() => onNavigate("Messages")}
           />
 
           <Shortcut
             icon="people"
             label="Amis"
+            onPress={() => onNavigate("Amis")}
           />
 
           <Shortcut
@@ -97,6 +126,7 @@ export function HomeScreen({
           <Shortcut
             icon="search"
             label="Mates"
+            onPress={() => onNavigate("Mates")}
           />
 
           <Shortcut
@@ -120,26 +150,21 @@ export function HomeScreen({
             Discussions récentes
           </Text>
 
-          <Pressable>
+          <Pressable onPress={() => onNavigate("Messages")}>
             <Text style={styles.seeAll}>
               Voir tout
             </Text>
           </Pressable>
         </View>
 
-        <Conversation
-          name="GameMate"
-          preview="Bienvenue sur ton application mobile."
-          time="Maintenant"
-          online
-          unread={1}
-        />
-
-        <Conversation
-          name="Tes amis"
-          preview="Tes discussions apparaîtront ici."
-          time=""
-        />
+        {recent.length ? recent.map((item) => <Conversation
+          key={item.conversation.id}
+          name={chatName(item.profile)}
+          preview={item.lastMessage?.body ?? "Commencer la conversation"}
+          time={item.lastMessage ? new Date(item.lastMessage.created_at).toLocaleDateString("fr-FR") : ""}
+          unread={item.unread}
+          onPress={() => onOpenConversation(item)}
+        />) : <Text style={styles.preview}>Tes discussions apparaîtront ici.</Text>}
 
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>
@@ -181,7 +206,8 @@ function Shortcut({
   return (
     <Pressable
       onPress={onPress}
-      style={styles.shortcutWrap}
+      disabled={!onPress}
+      style={[styles.shortcutWrap, !onPress && styles.shortcutDisabled]}
     >
       <View
         style={[
@@ -220,30 +246,19 @@ function Conversation({
   name,
   preview,
   time,
-  online = false,
   unread = 0,
+  onPress,
 }: {
   name: string;
   preview: string;
   time: string;
-  online?: boolean;
   unread?: number;
+  onPress: () => void;
 }) {
   return (
-    <View style={styles.conversation}>
+    <Pressable style={styles.conversation} onPress={onPress}>
       <View>
         <Avatar name={name} size={48} />
-
-        <View
-          style={[
-            styles.presence,
-            {
-              backgroundColor: online
-                ? theme.colors.success
-                : theme.colors.textMuted,
-            },
-          ]}
-        />
       </View>
 
       <View style={styles.conversationMain}>
@@ -274,7 +289,7 @@ function Conversation({
           ) : null}
         </View>
       </View>
-    </View>
+    </Pressable>
   );
 }
 
@@ -339,6 +354,10 @@ const styles = StyleSheet.create({
   shortcutWrap: {
     alignItems: "center",
     width: 61,
+  },
+
+  shortcutDisabled: {
+    opacity: 0.45,
   },
 
   shortcut: {

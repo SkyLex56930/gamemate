@@ -14,6 +14,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { supabase } from "./src/lib/supabase";
 import { startMobilePresence, stopMobilePresence } from "./src/lib/presence";
 import { AppNavigator } from "./src/navigation/AppNavigator";
+import { LoginScreen } from "./src/screens/LoginScreen";
 import { theme } from "./src/theme/theme";
 
 export default function App() {
@@ -69,7 +70,7 @@ export default function App() {
       ) : session ? (
         <AppNavigator session={session} />
       ) : (
-        <View style={styles.loading} />
+        <LoginScreen />
       )}
     </SafeAreaProvider>
   );

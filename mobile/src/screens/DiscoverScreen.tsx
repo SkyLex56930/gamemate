@@ -38,51 +38,33 @@ export function DiscoverScreen({
 
   useEffect(() => {
     const value = query.trim();
-
-    if (value.length < 2) {
-      setPlayers([]);
-      return;
-    }
-
+    if (value.length < 2) return;
+    let active = true;
     const timer = setTimeout(() => {
-      void search(value);
+      void (async () => {
+        setLoading(true);
+        setNotice("");
+        const [byUsername, byDisplay] = await Promise.all([
+          supabase.from("profiles").select("id,username,display_name,region,bio")
+            .neq("id", session.user.id).ilike("username", `%${value}%`).limit(20),
+          supabase.from("profiles").select("id,username,display_name,region,bio")
+            .neq("id", session.user.id).ilike("display_name", `%${value}%`).limit(20),
+        ]);
+        if (!active) return;
+        if (byUsername.error || byDisplay.error) {
+          setNotice("Recherche impossible. Réessaie.");
+        } else {
+          const map = new Map<string, Player>();
+          for (const row of [...(byUsername.data ?? []), ...(byDisplay.data ?? [])]) {
+            map.set(row.id, row as Player);
+          }
+          setPlayers(Array.from(map.values()));
+        }
+        setLoading(false);
+      })();
     }, 300);
-
-    return () => clearTimeout(timer);
-  }, [query]);
-
-  async function search(value: string) {
-    setLoading(true);
-    setNotice("");
-
-    const [byUsername, byDisplay] = await Promise.all([
-      supabase
-        .from("profiles")
-        .select("id,username,display_name,region,bio")
-        .neq("id", session.user.id)
-        .ilike("username", `%${value}%`)
-        .limit(20),
-
-      supabase
-        .from("profiles")
-        .select("id,username,display_name,region,bio")
-        .neq("id", session.user.id)
-        .ilike("display_name", `%${value}%`)
-        .limit(20),
-    ]);
-
-    const map = new Map<string, Player>();
-
-    for (const row of [
-      ...(byUsername.data ?? []),
-      ...(byDisplay.data ?? []),
-    ]) {
-      map.set(row.id, row as Player);
-    }
-
-    setPlayers(Array.from(map.values()));
-    setLoading(false);
-  }
+    return () => { active = false; clearTimeout(timer); };
+  }, [query, session.user.id]);
 
   async function addFriend(userId: string) {
     setWorkingId(userId);
@@ -135,7 +117,13 @@ export function DiscoverScreen({
 
         <TextInput
           value={query}
-          onChangeText={setQuery}
+          onChangeText={(value) => {
+            setQuery(value);
+            if (value.trim().length < 2) {
+              setPlayers([]);
+              setLoading(false);
+            }
+          }}
           placeholder="Rechercher un joueur..."
           placeholderTextColor="#66778A"
           autoCapitalize="none"
