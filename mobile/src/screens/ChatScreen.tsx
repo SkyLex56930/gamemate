@@ -74,7 +74,7 @@ export function ChatScreen({ session, navigation, route }: Props) {
   }
 
   return <SafeAreaView style={styles.root} edges={["bottom"]}>
-    <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+    <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === "ios" ? "padding" : "height"}>
     <View style={styles.header}>
       <Pressable onPress={() => navigation.goBack()} accessibilityLabel="Retour aux conversations" style={styles.back}>
         <Ionicons name="arrow-back" size={23} color={theme.colors.text} />
@@ -89,6 +89,7 @@ export function ChatScreen({ session, navigation, route }: Props) {
       <FlatList ref={list} data={messages} keyExtractor={(item) => item.id}
         contentContainerStyle={styles.thread}
         onContentSizeChange={() => list.current?.scrollToEnd({ animated: false })}
+        onLayout={() => list.current?.scrollToEnd({ animated: false })}
         ListEmptyComponent={<Text style={styles.empty}>Dis bonjour à {chatName(profile)} !</Text>}
         renderItem={({ item }) => <View style={[styles.bubble, item.sender_id === session.user.id ? styles.mine : styles.theirs]}>
           <Text style={styles.body}>{item.body}</Text>
