@@ -10,6 +10,10 @@ export type MobilePreferences = {
   messageSize: MessageSize;
   density: Density;
   messageBadges: boolean;
+  pushMessages: boolean;
+  pushFriends: boolean;
+  pushInvitations: boolean;
+  showMessagePreview: boolean;
 };
 
 export const accentPalettes: Record<Accent, { label: string; primary: string; light: string; secondary: string }> = {
@@ -21,6 +25,7 @@ export const accentPalettes: Record<Accent, { label: string; primary: string; li
 
 const DEFAULTS: MobilePreferences = {
   accent: "violet", messageSize: "normal", density: "comfortable", messageBadges: true,
+  pushMessages: true, pushFriends: true, pushInvitations: true, showMessagePreview: false,
 };
 
 const STORAGE_KEY = "gamemate-mobile-preferences-v1";
@@ -41,6 +46,10 @@ function parsePreferences(raw: string | null): MobilePreferences {
       messageSize: value.messageSize === "large" ? "large" : "normal",
       density: value.density === "compact" ? "compact" : "comfortable",
       messageBadges: typeof value.messageBadges === "boolean" ? value.messageBadges : true,
+      pushMessages: typeof value.pushMessages === "boolean" ? value.pushMessages : true,
+      pushFriends: typeof value.pushFriends === "boolean" ? value.pushFriends : true,
+      pushInvitations: typeof value.pushInvitations === "boolean" ? value.pushInvitations : true,
+      showMessagePreview: typeof value.showMessagePreview === "boolean" ? value.showMessagePreview : false,
     };
   } catch {
     return DEFAULTS;

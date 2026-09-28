@@ -16,9 +16,10 @@ type Props = {
   onNavigate: (tab: "Messages" | "Amis" | "Mates" | "Profil" | "Boutique") => void;
   onOpenConversation: (item: ConversationItem) => void;
   onUnreadChange: (count: number) => void;
+  onNotifications: () => void;
 };
 
-export function HomeScreen({ session, onNavigate, onOpenConversation, onUnreadChange }: Props) {
+export function HomeScreen({ session, onNavigate, onOpenConversation, onUnreadChange, onNotifications }: Props) {
   const palette = useAccentPalette();
   const { preferences } = useMobilePreferences();
   const insets = useSafeAreaInsets();
@@ -126,6 +127,12 @@ export function HomeScreen({ session, onNavigate, onOpenConversation, onUnreadCh
           </Pressable>
         </View>}
 
+      <Pressable onPress={onNotifications} style={styles.notificationsLink} accessibilityRole="button">
+        <Ionicons name="notifications-outline" size={20} color={palette.secondary} />
+        <Text style={styles.notificationsText}>Invitations et demandes d’amis</Text>
+        <Ionicons name="chevron-forward" size={17} color={theme.colors.textSoft} />
+      </Pressable>
+
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>Discussions récentes</Text>
         <Pressable onPress={() => onNavigate("Messages")} accessibilityRole="button">
@@ -179,6 +186,9 @@ export function HomeScreen({ session, onNavigate, onOpenConversation, onUnreadCh
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: theme.colors.background },
   page: { paddingHorizontal: 18, paddingTop: 12 },
+  notificationsLink: { flexDirection: "row", alignItems: "center", gap: 10, padding: 13,
+    marginBottom: 14, borderRadius: 13, backgroundColor: theme.colors.surface },
+  notificationsText: { flex: 1, color: theme.colors.text, fontSize: 13, fontWeight: "700" },
   loading: { marginVertical: 65 },
   retry: { padding: 24, borderRadius: 16, backgroundColor: theme.colors.surface },
   retryText: { color: theme.colors.danger },

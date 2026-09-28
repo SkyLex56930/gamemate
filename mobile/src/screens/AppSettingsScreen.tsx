@@ -1,11 +1,12 @@
 import { useCallback, useState } from "react";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
+import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { accentPalettes, useMobilePreferences, type Accent } from "../lib/mobilePreferences";
 import { supabase } from "../lib/supabase";
 import { theme } from "../theme/theme";
+import type { PushStatus } from "../lib/mobilePush";
 
 type Privacy = {
   show_bio: boolean;
@@ -28,7 +29,19 @@ const privacyDefaults: Privacy = {
   allow_direct_calls: true,
 };
 
-export function AppSettingsScreen({ onBack }: { onBack: () => void }) {
+const pushStatusText: Record<PushStatus, string> = {
+  checking: "Activation des alertes en cours…",
+  ready: "Alertes activées sur ce téléphone.",
+  "expo-go": "Installe la version Android GameMate pour recevoir les alertes hors de l’application.",
+  simulator: "Les alertes nécessitent un vrai téléphone.",
+  "missing-project": "Le projet Expo doit être lié avant d’activer les alertes.",
+  denied: "Les notifications sont désactivées dans les réglages du téléphone.",
+  error: "Impossible d’activer les alertes. Vérifie la connexion et la version installée.",
+};
+
+export function AppSettingsScreen({ onBack, pushStatus, retryPush }: {
+  onBack: () => void; pushStatus: PushStatus; retryPush: () => void;
+}) {
   const insets = useSafeAreaInsets();
   const { preferences, updatePreferences } = useMobilePreferences();
   const accent = accentPalettes[preferences.accent].primary;
@@ -141,7 +154,27 @@ export function AppSettingsScreen({ onBack }: { onBack: () => void }) {
       <SettingSwitch title="Compteur de messages" hint="Affiche les messages non lus dans la navigation."
         value={preferences.messageBadges} accent={accent}
         onChange={(messageBadges) => updatePreferences({ messageBadges })} />
-      <Text style={styles.hint}>Les alertes système sur le téléphone seront ajoutées avec les notifications mobiles.</Text>
+      <View style={styles.divider} />
+      <Text style={styles.optionTitle}>Alertes du téléphone</Text>
+      <Text style={styles.hint}>{pushStatusText[pushStatus]}</Text>
+      {pushStatus === "denied" && <Pressable onPress={() => void Linking.openSettings()}>
+        <Text style={[styles.retryText, { color: accent }]}>Ouvrir les réglages du téléphone</Text>
+      </Pressable>}
+      {pushStatus === "error" && <Pressable onPress={retryPush}>
+        <Text style={[styles.retryText, { color: accent }]}>Réessayer l’activation</Text>
+      </Pressable>}
+      <SettingSwitch title="Nouveaux messages" hint="Une alerte quand un joueur t’écrit."
+        value={preferences.pushMessages} accent={accent}
+        onChange={(pushMessages) => updatePreferences({ pushMessages })} />
+      <SettingSwitch title="Demandes d’amis" hint="Une alerte pour une nouvelle demande."
+        value={preferences.pushFriends} accent={accent}
+        onChange={(pushFriends) => updatePreferences({ pushFriends })} />
+      <SettingSwitch title="Invitations d’équipe" hint="Une alerte pour rejoindre une équipe."
+        value={preferences.pushInvitations} accent={accent}
+        onChange={(pushInvitations) => updatePreferences({ pushInvitations })} />
+      <SettingSwitch title="Aperçu du message" hint="Affiche le texte sur l’écran verrouillé. Désactivé par défaut."
+        value={preferences.showMessagePreview} accent={accent}
+        onChange={(showMessagePreview) => updatePreferences({ showMessagePreview })} />
     </View>
 
     <View style={styles.card}>
@@ -193,6 +226,7 @@ const styles = StyleSheet.create({
   kicker: { fontSize: 10, fontWeight: "800", letterSpacing: 1.1 },
   title: { fontSize: 20, fontWeight: "900", color: theme.colors.text },
   card: { padding: 17, borderRadius: 18, backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: theme.colors.border, gap: 11 },
+  divider: { height: 1, backgroundColor: theme.colors.border, marginVertical: 3 },
   section: { color: theme.colors.text, fontSize: 17, fontWeight: "800" },
   hint: { color: theme.colors.textSoft, fontSize: 12, lineHeight: 17 },
   palettes: { flexDirection: "row", flexWrap: "wrap", gap: 9 },

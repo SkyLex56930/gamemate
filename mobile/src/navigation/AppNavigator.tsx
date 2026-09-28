@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { Alert } from "react-native";
 import type { Session } from "@supabase/supabase-js";
 import {
@@ -10,6 +10,7 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { HomeScreen } from "../screens/HomeScreen";
+import { NotificationsScreen } from "../screens/NotificationsScreen";
 import { FriendsScreen } from "../screens/FriendsScreen";
 import { MessagesScreen } from "../screens/MessagesScreen";
 import { ChatScreen } from "../screens/ChatScreen";
@@ -22,6 +23,9 @@ import { supabase } from "../lib/supabase";
 import type { ChatProfile, Conversation, ConversationItem } from "../lib/messages";
 import { theme } from "../theme/theme";
 import { accentPalettes, useMobilePreferences } from "../lib/mobilePreferences";
+import { useMobilePush, type PushStatus } from "../lib/mobilePush";
+
+type HomeStackParamList = { TableauDeBord: undefined; Notifications: undefined };
 
 export type MessagesStackParamList = {
   Conversations: undefined;
@@ -36,7 +40,7 @@ export type ProfileStackParamList = {
 };
 
 type TabParamList = {
-  Accueil: undefined;
+  Accueil: NavigatorScreenParams<HomeStackParamList>;
   Amis: undefined;
   Messages: NavigatorScreenParams<MessagesStackParamList>;
   Mates: undefined;
@@ -44,6 +48,7 @@ type TabParamList = {
 };
 
 const Tabs = createBottomTabNavigator<TabParamList>();
+const HomeStack = createNativeStackNavigator<HomeStackParamList>();
 const Stack = createNativeStackNavigator<MessagesStackParamList>();
 const ProfileStack = createNativeStackNavigator<ProfileStackParamList>();
 
@@ -61,7 +66,27 @@ function MessagesStackView({ session, onUnreadChange }: {
   </Stack.Navigator>;
 }
 
-function ProfileStackView({ session }: { session: Session }) {
+function HomeStackView({ session, onNavigate, onOpenConversation, onUnreadChange }: {
+  session: Session;
+  onNavigate: (tab: "Messages" | "Amis" | "Mates" | "Profil" | "Boutique") => void;
+  onOpenConversation: (item: ConversationItem) => void;
+  onUnreadChange: (count: number) => void;
+}) {
+  return <HomeStack.Navigator screenOptions={{ headerShown: false }}>
+    <HomeStack.Screen name="TableauDeBord">
+      {({ navigation }) => <HomeScreen session={session} onNavigate={onNavigate}
+        onOpenConversation={onOpenConversation} onUnreadChange={onUnreadChange}
+        onNotifications={() => navigation.navigate("Notifications")} />}
+    </HomeStack.Screen>
+    <HomeStack.Screen name="Notifications">
+      {({ navigation }) => <NotificationsScreen session={session} onBack={() => navigation.goBack()} />}
+    </HomeStack.Screen>
+  </HomeStack.Navigator>;
+}
+
+function ProfileStackView({ session, pushStatus, retryPush }: {
+  session: Session; pushStatus: PushStatus; retryPush: () => void;
+}) {
   return <ProfileStack.Navigator screenOptions={{ headerShown: false }}>
     <ProfileStack.Screen name="ApercuProfil">
       {({ navigation }) => <ProfileScreen session={session}
@@ -73,7 +98,8 @@ function ProfileStackView({ session }: { session: Session }) {
       {({ navigation }) => <ProfileSettingsScreen session={session} onBack={() => navigation.goBack()} />}
     </ProfileStack.Screen>
     <ProfileStack.Screen name="ParametresApplication">
-      {({ navigation }) => <AppSettingsScreen onBack={() => navigation.goBack()} />}
+      {({ navigation }) => <AppSettingsScreen onBack={() => navigation.goBack()}
+        pushStatus={pushStatus} retryPush={retryPush} />}
     </ProfileStack.Screen>
     <ProfileStack.Screen name="Boutique">
       {({ navigation }) => <ShopScreen session={session} onBack={() => navigation.goBack()} />}
@@ -98,6 +124,31 @@ export function AppNavigator({ session }: { session: Session }) {
   const navigation = useNavigationContainerRef<TabParamList>();
   const [unread, setUnread] = useState(0);
   const onUnreadChange = useCallback((count: number) => setUnread(count), []);
+  const pendingPush = useRef<Record<string, unknown> | null>(null);
+
+  const openPush = useCallback(async (data: Record<string, unknown>) => {
+    if (!navigation.isReady()) { pendingPush.current = data; return; }
+    if (data.kind === "friend_request" || data.kind === "squad_invite") {
+      navigation.navigate("Accueil", { screen: "Notifications" });
+      return;
+    }
+    if (data.kind !== "message" || typeof data.conversationId !== "string"
+      || typeof data.senderId !== "string") return;
+    const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuid.test(data.conversationId) || !uuid.test(data.senderId)) return;
+
+    const [conversation, profile] = await Promise.all([
+      supabase.from("conversations").select("id").eq("id", data.conversationId).single(),
+      supabase.from("profiles").select("id,username,display_name,avatar_url")
+        .eq("id", data.senderId).single(),
+    ]);
+    if (conversation.error || profile.error || !conversation.data || !profile.data) return;
+    navigation.navigate("Messages", { screen: "Chat", params: {
+      conversationId: conversation.data.id, profile: profile.data as ChatProfile,
+    } });
+  }, [navigation]);
+
+  const push = useMobilePush(session, openPush);
 
   async function openMessage(userId: string) {
     try {
@@ -132,7 +183,13 @@ export function AppNavigator({ session }: { session: Session }) {
     else navigation.navigate("Profil", { screen: tab === "Boutique" ? "Boutique" : "ApercuProfil" });
   }
 
-  return <NavigationContainer ref={navigation} theme={{
+  return <NavigationContainer ref={navigation} onReady={() => {
+    if (pendingPush.current) {
+      const data = pendingPush.current;
+      pendingPush.current = null;
+      void openPush(data);
+    }
+  }} theme={{
     ...DarkTheme,
     colors: {
       ...DarkTheme.colors,
@@ -147,7 +204,7 @@ export function AppNavigator({ session }: { session: Session }) {
       tabBarHideOnKeyboard: true,
       tabBarActiveTintColor: "#FFFFFF",
       tabBarInactiveTintColor: theme.colors.textMuted,
-      tabBarStyle: getFocusedRouteNameFromRoute(route) === "Chat"
+      tabBarStyle: (route.name === "Messages" && getFocusedRouteNameFromRoute(route) === "Chat")
         ? { display: "none" }
         : {
           position: "absolute", left: 16, right: 16, bottom: Math.max(insets.bottom, 16),
@@ -161,7 +218,7 @@ export function AppNavigator({ session }: { session: Session }) {
       tabBarIcon: ({ focused, color }) => <Ionicons name={iconName(route.name, focused)} size={22} color={color} />,
     })}>
       <Tabs.Screen name="Accueil">
-        {() => <HomeScreen session={session} onNavigate={goToTab}
+        {() => <HomeStackView session={session} onNavigate={goToTab}
           onOpenConversation={openConversation} onUnreadChange={onUnreadChange} />}
       </Tabs.Screen>
       <Tabs.Screen name="Amis">
@@ -175,7 +232,7 @@ export function AppNavigator({ session }: { session: Session }) {
         {() => <DiscoverScreen session={session} onMessage={(userId) => { void openMessage(userId); }} />}
       </Tabs.Screen>
       <Tabs.Screen name="Profil">
-        {() => <ProfileStackView session={session} />}
+        {() => <ProfileStackView session={session} pushStatus={push.status} retryPush={push.retry} />}
       </Tabs.Screen>
     </Tabs.Navigator>
   </NavigationContainer>;
