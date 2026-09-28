@@ -10,6 +10,7 @@ import { cosmeticColors, type Cosmetic } from "../lib/cosmetics";
 import { getMyProfileSummary, type ProfileSummary } from "../lib/profileSummary";
 import { supabase } from "../lib/supabase";
 import { theme } from "../theme/theme";
+import { accentPalettes, useMobilePreferences } from "../lib/mobilePreferences";
 
 type MyPost = {
   post_id: string;
@@ -20,11 +21,15 @@ type MyPost = {
   created_at: string;
 };
 
-export function ProfileScreen({ session, onSettings, onShop }: {
+export function ProfileScreen({ session, onSettings, onAppSettings, onShop }: {
   session: Session;
   onSettings: () => void;
+  onAppSettings: () => void;
   onShop: () => void;
 }) {
+  const { preferences } = useMobilePreferences();
+  const palette = accentPalettes[preferences.accent];
+  const accent = palette.primary;
   const insets = useSafeAreaInsets();
   const [summary, setSummary] = useState<ProfileSummary | null>(null);
   const [posts, setPosts] = useState<MyPost[]>([]);
@@ -76,16 +81,21 @@ export function ProfileScreen({ session, onSettings, onShop }: {
     refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => {
       setRefreshing(true);
       void reload();
-    }} tintColor={theme.colors.primary} />}>
+    }} tintColor={accent} />}>
     <View style={styles.top}>
       <Text style={styles.title}>Mon profil</Text>
       <Pressable onPress={onSettings} style={styles.settings} accessibilityRole="button"
-        accessibilityLabel="Paramètres du profil">
+        accessibilityLabel="Modifier mon profil">
         <Ionicons name="settings-outline" size={21} color={theme.colors.text} />
       </Pressable>
     </View>
+    <Pressable onPress={onAppSettings} style={styles.appSettings} accessibilityRole="button">
+      <Ionicons name="options-outline" size={20} color={accent} />
+      <Text style={styles.appSettingsText}>Paramètres de l’application</Text>
+      <Ionicons name="chevron-forward" size={17} color={theme.colors.textSoft} />
+    </Pressable>
 
-    {loading && !summary ? <ActivityIndicator style={styles.loading} color={theme.colors.primary} /> :
+    {loading && !summary ? <ActivityIndicator style={styles.loading} color={accent} /> :
       error && !summary ? <Pressable onPress={() => void reload()} style={styles.errorBox}>
         <Text style={styles.error}>{error}</Text>
       </Pressable> : summary && <>
@@ -97,7 +107,7 @@ export function ProfileScreen({ session, onSettings, onShop }: {
             </LinearGradient>}
 
         <View style={styles.identity}>
-          <View style={[styles.avatarFrame, frame && { borderColor: frame.style?.accent || theme.colors.primarySoft }]}>
+          <View style={[styles.avatarFrame, frame && { borderColor: frame.style?.accent || palette.light }]}>
             <Avatar name={name} url={profile?.avatar_url} size={78} />
           </View>
           <View style={styles.identityText}>
@@ -118,14 +128,14 @@ export function ProfileScreen({ session, onSettings, onShop }: {
           <Text style={styles.sectionTitle}>Mes jeux</Text>
           {summary.games.length ? <View style={styles.games}>
             {summary.games.map((game, index) => <View key={`${game}-${index}`} style={styles.game}>
-              <Ionicons name="game-controller-outline" size={16} color={theme.colors.cyan} />
+              <Ionicons name="game-controller-outline" size={16} color={palette.secondary} />
               <Text style={styles.gameText}>{game}</Text>
             </View>)}
           </View> : <Text style={styles.empty}>Tes jeux apparaîtront ici une fois ajoutés sur GameMate.</Text>}
         </View>
 
         <Pressable style={styles.shopLink} onPress={onShop} accessibilityRole="button">
-          <View style={styles.shopIcon}><Ionicons name="sparkles" size={23} color={theme.colors.cyan} /></View>
+          <View style={styles.shopIcon}><Ionicons name="sparkles" size={23} color={palette.secondary} /></View>
           <View style={styles.shopCopy}>
             <Text style={styles.shopTitle}>Boutique et cosmétiques</Text>
             <Text style={styles.shopSubtitle}>Cadres, bannières et récompenses</Text>
@@ -139,14 +149,14 @@ export function ProfileScreen({ session, onSettings, onShop }: {
           {feedError ? <Pressable onPress={() => void reload()}><Text style={styles.error}>Impossible de charger le fil. Réessayer</Text></Pressable> :
             posts.length ? posts.map((post) => <View key={post.post_id} style={styles.post}>
               <View style={styles.postHeader}>
-                <Ionicons name="people-outline" size={17} color={theme.colors.cyan} />
-                <Text style={styles.postKind}>RECHERCHE DE MATES</Text>
+                <Ionicons name="people-outline" size={17} color={palette.secondary} />
+                <Text style={[styles.postKind, { color: palette.secondary }]}>RECHERCHE DE MATES</Text>
                 <Text style={styles.date}>{new Date(post.created_at).toLocaleDateString("fr-FR")}</Text>
               </View>
               <Text style={styles.postTitle}>{post.title}</Text>
               {!!post.description && <Text style={styles.postDescription}>{post.description}</Text>}
               <View style={styles.postFooter}>
-                <Text style={styles.gameLabel}>{post.game_name}</Text>
+                <Text style={[styles.gameLabel, { color: palette.light }]}>{post.game_name}</Text>
                 <Text style={[styles.status, post.post_status === "open" && styles.open]}>
                   {post.post_status === "open" ? "En cours" : post.post_status === "closed" ? "Terminée" : "Annulée"}
                 </Text>
@@ -163,6 +173,9 @@ const styles = StyleSheet.create({
   top: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginHorizontal: 18 },
   title: { color: theme.colors.text, fontSize: 22, fontWeight: "900" },
   settings: { width: 42, height: 42, borderRadius: 13, backgroundColor: theme.colors.surface, alignItems: "center", justifyContent: "center" },
+  appSettings: { flexDirection: "row", alignItems: "center", gap: 10, marginHorizontal: 18, padding: 13,
+    borderRadius: 13, backgroundColor: theme.colors.surface },
+  appSettingsText: { flex: 1, fontSize: 13, fontWeight: "700", color: theme.colors.text },
   loading: { marginVertical: 70 },
   errorBox: { padding: 18, marginHorizontal: 18, backgroundColor: theme.colors.surface, borderRadius: 14 },
   error: { color: theme.colors.danger, fontSize: 12 },

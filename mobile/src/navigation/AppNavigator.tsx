@@ -16,10 +16,12 @@ import { ChatScreen } from "../screens/ChatScreen";
 import { DiscoverScreen } from "../screens/DiscoverScreen";
 import { ProfileScreen } from "../screens/ProfileScreen";
 import { ProfileSettingsScreen } from "../screens/ProfileSettingsScreen";
+import { AppSettingsScreen } from "../screens/AppSettingsScreen";
 import { ShopScreen } from "../screens/ShopScreen";
 import { supabase } from "../lib/supabase";
 import type { ChatProfile, Conversation, ConversationItem } from "../lib/messages";
 import { theme } from "../theme/theme";
+import { accentPalettes, useMobilePreferences } from "../lib/mobilePreferences";
 
 export type MessagesStackParamList = {
   Conversations: undefined;
@@ -29,6 +31,7 @@ export type MessagesStackParamList = {
 export type ProfileStackParamList = {
   ApercuProfil: undefined;
   Parametres: undefined;
+  ParametresApplication: undefined;
   Boutique: undefined;
 };
 
@@ -63,10 +66,14 @@ function ProfileStackView({ session }: { session: Session }) {
     <ProfileStack.Screen name="ApercuProfil">
       {({ navigation }) => <ProfileScreen session={session}
         onSettings={() => navigation.navigate("Parametres")}
+        onAppSettings={() => navigation.navigate("ParametresApplication")}
         onShop={() => navigation.navigate("Boutique")} />}
     </ProfileStack.Screen>
     <ProfileStack.Screen name="Parametres">
       {({ navigation }) => <ProfileSettingsScreen session={session} onBack={() => navigation.goBack()} />}
+    </ProfileStack.Screen>
+    <ProfileStack.Screen name="ParametresApplication">
+      {({ navigation }) => <AppSettingsScreen onBack={() => navigation.goBack()} />}
     </ProfileStack.Screen>
     <ProfileStack.Screen name="Boutique">
       {({ navigation }) => <ShopScreen session={session} onBack={() => navigation.goBack()} />}
@@ -85,6 +92,8 @@ function iconName(name: keyof TabParamList, focused: boolean): keyof typeof Ioni
 }
 
 export function AppNavigator({ session }: { session: Session }) {
+  const { preferences } = useMobilePreferences();
+  const accent = accentPalettes[preferences.accent].primary;
   const insets = useSafeAreaInsets();
   const navigation = useNavigationContainerRef<TabParamList>();
   const [unread, setUnread] = useState(0);
@@ -127,7 +136,7 @@ export function AppNavigator({ session }: { session: Session }) {
     ...DarkTheme,
     colors: {
       ...DarkTheme.colors,
-      primary: theme.colors.primary, background: theme.colors.background,
+      primary: accent, background: theme.colors.background,
       card: theme.colors.surface, text: theme.colors.text,
       border: theme.colors.border, notification: theme.colors.danger,
     },
@@ -158,8 +167,8 @@ export function AppNavigator({ session }: { session: Session }) {
       <Tabs.Screen name="Amis">
         {() => <FriendsScreen session={session} onMessage={(userId) => { void openMessage(userId); }} />}
       </Tabs.Screen>
-      <Tabs.Screen name="Messages" options={{ tabBarBadge: unread > 0 ? unread : undefined,
-        tabBarBadgeStyle: { backgroundColor: theme.colors.primary, color: "#FFFFFF", fontSize: 9, fontWeight: "900" } }}>
+      <Tabs.Screen name="Messages" options={{ tabBarBadge: preferences.messageBadges && unread > 0 ? unread : undefined,
+      tabBarBadgeStyle: { backgroundColor: accent, color: "#FFFFFF", fontSize: 9, fontWeight: "900" } }}>
         {() => <MessagesStackView session={session} onUnreadChange={onUnreadChange} />}
       </Tabs.Screen>
       <Tabs.Screen name="Mates">

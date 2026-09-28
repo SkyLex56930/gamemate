@@ -10,6 +10,7 @@ import { chatName, getConversations, type ConversationItem } from "../lib/messag
 import { supabase } from "../lib/supabase";
 import type { MessagesStackParamList } from "../navigation/AppNavigator";
 import { theme } from "../theme/theme";
+import { useAccentPalette, useMobilePreferences } from "../lib/mobilePreferences";
 
 type Props = NativeStackScreenProps<MessagesStackParamList, "Conversations"> & {
   session: Session;
@@ -17,6 +18,8 @@ type Props = NativeStackScreenProps<MessagesStackParamList, "Conversations"> & {
 };
 
 export function MessagesScreen({ session, navigation, onUnreadChange }: Props) {
+  const palette = useAccentPalette();
+  const { preferences } = useMobilePreferences();
   const insets = useSafeAreaInsets();
   const [items, setItems] = useState<ConversationItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -57,12 +60,12 @@ export function MessagesScreen({ session, navigation, onUnreadChange }: Props) {
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => {
         setRefreshing(true);
         void load();
-      }} tintColor={theme.colors.primary} />}
+      }} tintColor={palette.primary} />}
       ListHeaderComponent={<View style={styles.heading}>
-        <Text style={styles.kicker}>DISCUSSIONS</Text>
+        <Text style={[styles.kicker, { color: palette.secondary }]}>DISCUSSIONS</Text>
         <Text style={styles.title}>Messages</Text>
       </View>}
-      ListEmptyComponent={loading ? <ActivityIndicator color={theme.colors.primary} /> :
+      ListEmptyComponent={loading ? <ActivityIndicator color={palette.primary} /> :
         <View style={styles.empty}>
           <Ionicons name="chatbubbles-outline" size={32} color={theme.colors.textSoft} />
           <Text style={styles.emptyText}>Aucune conversation pour le moment.</Text>
@@ -79,10 +82,12 @@ export function MessagesScreen({ session, navigation, onUnreadChange }: Props) {
             <Text style={styles.date}>{item.lastMessage ? new Date(item.lastMessage.created_at).toLocaleDateString("fr-FR") : ""}</Text>
           </View>
           <View style={styles.line}>
-            <Text style={[styles.preview, item.unread > 0 && styles.unreadText]} numberOfLines={1}>
+            <Text style={[styles.preview, item.unread > 0 && styles.unreadText,
+              preferences.messageSize === "large" && styles.previewLarge]} numberOfLines={1}>
               {item.lastMessage ? `${item.lastMessage.sender_id === session.user.id ? "Vous : " : ""}${item.lastMessage.body}` : "Commencer la conversation"}
             </Text>
-            {item.unread > 0 && <View style={styles.badge}><Text style={styles.badgeText}>{item.unread}</Text></View>}
+            {preferences.messageBadges && item.unread > 0 && <View style={[styles.badge, { backgroundColor: palette.primary }]}>
+              <Text style={styles.badgeText}>{item.unread}</Text></View>}
           </View>
         </View>
       </Pressable>}
@@ -103,6 +108,7 @@ const styles = StyleSheet.create({
   name: { color: theme.colors.text, fontSize: 15, fontWeight: "700", flex: 1 },
   date: { color: theme.colors.textMuted, fontSize: 11 },
   preview: { color: theme.colors.textSoft, fontSize: 13, flex: 1 },
+  previewLarge: { fontSize: 16 },
   unreadText: { color: theme.colors.text, fontWeight: "700" },
   badge: { backgroundColor: theme.colors.primary, minWidth: 20, height: 20, paddingHorizontal: 5, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   badgeText: { color: "#FFFFFF", fontSize: 11, fontWeight: "800" },

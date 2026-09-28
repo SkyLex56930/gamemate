@@ -9,6 +9,7 @@ import { chatName, getConversations, type ConversationItem } from "../lib/messag
 import { getMyProfileSummary, type ProfileSummary } from "../lib/profileSummary";
 import { supabase } from "../lib/supabase";
 import { theme } from "../theme/theme";
+import { useAccentPalette, useMobilePreferences } from "../lib/mobilePreferences";
 
 type Props = {
   session: Session;
@@ -18,6 +19,8 @@ type Props = {
 };
 
 export function HomeScreen({ session, onNavigate, onOpenConversation, onUnreadChange }: Props) {
+  const palette = useAccentPalette();
+  const { preferences } = useMobilePreferences();
   const insets = useSafeAreaInsets();
   const [summary, setSummary] = useState<ProfileSummary | null>(null);
   const [profileLoading, setProfileLoading] = useState(true);
@@ -66,7 +69,7 @@ export function HomeScreen({ session, onNavigate, onOpenConversation, onUnreadCh
   return <View style={styles.root}>
     <ScrollView contentContainerStyle={[styles.page, { paddingBottom: insets.bottom + 110 }]}
       showsVerticalScrollIndicator={false}>
-      {profileLoading && !summary ? <ActivityIndicator style={styles.loading} color={theme.colors.primary} /> :
+      {profileLoading && !summary ? <ActivityIndicator style={styles.loading} color={palette.primary} /> :
         profileError && !summary ? <Pressable style={styles.retry} onPress={() => void loadProfile()}>
           <Text style={styles.retryText}>Impossible de charger ton profil. Appuie pour réessayer.</Text>
         </Pressable> :
@@ -91,11 +94,11 @@ export function HomeScreen({ session, onNavigate, onOpenConversation, onUnreadCh
 
           {(profile?.region || profile?.language) && <View style={styles.meta}>
             {!!profile.region && <View style={styles.metaItem}>
-              <Ionicons name="location-outline" size={15} color={theme.colors.cyan} />
+              <Ionicons name="location-outline" size={15} color={palette.secondary} />
               <Text style={styles.metaText}>{profile.region}</Text>
             </View>}
             {!!profile.language && <View style={styles.metaItem}>
-              <Ionicons name="language-outline" size={15} color={theme.colors.cyan} />
+              <Ionicons name="language-outline" size={15} color={palette.secondary} />
               <Text style={styles.metaText}>{profile.language}</Text>
             </View>}
           </View>}
@@ -112,21 +115,21 @@ export function HomeScreen({ session, onNavigate, onOpenConversation, onUnreadCh
           {summary.completion !== null && <View style={styles.completion}>
             <View style={styles.completionLine}>
               <Text style={styles.completionLabel}>Profil complété</Text>
-              <Text style={styles.completionValue}>{summary.completion}%</Text>
+              <Text style={[styles.completionValue, { color: palette.light }]}>{summary.completion}%</Text>
             </View>
-            <View style={styles.track}><View style={[styles.fill, { width: `${summary.completion}%` }]} /></View>
+            <View style={styles.track}><View style={[styles.fill, { width: `${summary.completion}%`, backgroundColor: palette.primary }]} /></View>
           </View>}
 
           <Pressable style={styles.profileLink} onPress={() => onNavigate("Profil")} accessibilityRole="button">
-            <Text style={styles.profileLinkText}>Voir mon profil</Text>
-            <Ionicons name="arrow-forward" size={17} color={theme.colors.primarySoft} />
+            <Text style={[styles.profileLinkText, { color: palette.light }]}>Voir mon profil</Text>
+            <Ionicons name="arrow-forward" size={17} color={palette.light} />
           </Pressable>
         </View>}
 
       <View style={styles.sectionHeader}>
         <Text style={styles.sectionTitle}>Discussions récentes</Text>
         <Pressable onPress={() => onNavigate("Messages")} accessibilityRole="button">
-          <Text style={styles.seeAll}>Voir tout</Text>
+          <Text style={[styles.seeAll, { color: palette.light }]}>Voir tout</Text>
         </Pressable>
       </View>
       {recent.length ? recent.map((item) => <Pressable key={item.conversation.id}
@@ -139,10 +142,10 @@ export function HomeScreen({ session, onNavigate, onOpenConversation, onUnreadCh
               ? new Date(item.lastMessage.created_at).toLocaleDateString("fr-FR") : ""}</Text>
           </View>
           <View style={styles.conversationBottom}>
-            <Text numberOfLines={1} style={styles.preview}>
+            <Text numberOfLines={1} style={[styles.preview, preferences.messageSize === "large" && styles.previewLarge]}>
               {item.lastMessage?.body ?? "Commencer la conversation"}
             </Text>
-            {item.unread > 0 && <View style={styles.unread}>
+            {preferences.messageBadges && item.unread > 0 && <View style={[styles.unread, { backgroundColor: palette.primary }]}>
               <Text style={styles.unreadText}>{item.unread}</Text>
             </View>}
           </View>
@@ -151,7 +154,7 @@ export function HomeScreen({ session, onNavigate, onOpenConversation, onUnreadCh
 
       <Pressable style={styles.discover} onPress={() => onNavigate("Mates")} accessibilityRole="button">
         <View style={styles.discoverIcon}>
-          <Ionicons name="search-outline" size={21} color={theme.colors.primarySoft} />
+          <Ionicons name="search-outline" size={21} color={palette.light} />
         </View>
         <View style={styles.discoverCopy}>
           <Text style={styles.discoverTitle}>Trouver des mates</Text>
@@ -161,7 +164,7 @@ export function HomeScreen({ session, onNavigate, onOpenConversation, onUnreadCh
       </Pressable>
       <Pressable style={styles.discover} onPress={() => onNavigate("Boutique")} accessibilityRole="button">
         <View style={styles.discoverIcon}>
-          <Ionicons name="sparkles-outline" size={21} color={theme.colors.cyan} />
+          <Ionicons name="sparkles-outline" size={21} color={palette.secondary} />
         </View>
         <View style={styles.discoverCopy}>
           <Text style={styles.discoverTitle}>Boutique GameMate</Text>
@@ -215,6 +218,7 @@ const styles = StyleSheet.create({
   time: { color: theme.colors.textMuted, fontSize: 10 },
   conversationBottom: { flexDirection: "row", alignItems: "center", gap: 8 },
   preview: { flex: 1, color: theme.colors.textSoft, fontSize: 12 },
+  previewLarge: { fontSize: 15 },
   unread: { minWidth: 20, height: 20, paddingHorizontal: 5, borderRadius: 10, alignItems: "center", justifyContent: "center", backgroundColor: theme.colors.primary },
   unreadText: { color: "#FFFFFF", fontSize: 10, fontWeight: "800" },
   noConversations: { color: theme.colors.textSoft, fontSize: 13, marginTop: 12 },

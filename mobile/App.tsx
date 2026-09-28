@@ -16,6 +16,7 @@ import { NavigationBar } from "expo-navigation-bar";
 import { supabase } from "./src/lib/supabase";
 import { startMobilePresence, stopMobilePresence } from "./src/lib/presence";
 import { AppNavigator } from "./src/navigation/AppNavigator";
+import { MobilePreferencesProvider } from "./src/lib/mobilePreferences";
 import { LoginScreen } from "./src/screens/LoginScreen";
 import { theme } from "./src/theme/theme";
 
@@ -66,19 +67,21 @@ export default function App() {
         hidden={Platform.OS === "android"}
       />
       {Platform.OS === "android" && <NavigationBar hidden />}
-      <SafeAreaView style={styles.root} edges={["top"]}>
-        {loading ? (
-          <View style={styles.loading}>
-            <ActivityIndicator size="large" />
-          </View>
-        ) : session ? (
-          <AppNavigator session={session} />
-        ) : (
-          <SafeAreaView style={styles.root} edges={["bottom"]}>
-            <LoginScreen />
-          </SafeAreaView>
-        )}
-      </SafeAreaView>
+      <MobilePreferencesProvider>
+        <SafeAreaView style={styles.root} edges={["top"]}>
+          {loading ? (
+            <View style={styles.loading}>
+              <ActivityIndicator size="large" />
+            </View>
+          ) : session ? (
+            <AppNavigator session={session} />
+          ) : (
+            <SafeAreaView style={styles.root} edges={["bottom"]}>
+              <LoginScreen />
+            </SafeAreaView>
+          )}
+        </SafeAreaView>
+      </MobilePreferencesProvider>
     </SafeAreaProvider>
   );
 }

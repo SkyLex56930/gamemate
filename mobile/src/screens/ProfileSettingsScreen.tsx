@@ -8,8 +8,10 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Avatar } from "../components/Avatar";
 import { supabase } from "../lib/supabase";
 import { theme } from "../theme/theme";
+import { useAccentPalette } from "../lib/mobilePreferences";
 
 export function ProfileSettingsScreen({ session, onBack }: { session: Session; onBack: () => void }) {
+  const palette = useAccentPalette();
   const insets = useSafeAreaInsets();
   const [displayName, setDisplayName] = useState("");
   const [username, setUsername] = useState("");
@@ -73,7 +75,7 @@ export function ProfileSettingsScreen({ session, onBack }: { session: Session; o
           <Ionicons name="arrow-back" size={22} color={theme.colors.text} />
         </Pressable>
         <View>
-          <Text style={styles.kicker}>PARAMÈTRES</Text>
+          <Text style={[styles.kicker, { color: palette.secondary }]}>PARAMÈTRES</Text>
           <Text style={styles.headerTitle}>Modifier mon profil</Text>
         </View>
       </View>
@@ -125,7 +127,7 @@ export function ProfileSettingsScreen({ session, onBack }: { session: Session; o
 
         {notice ? <Text style={styles.notice}>{notice}</Text> : null}
 
-        <Pressable style={[styles.button, saving && styles.disabled]} disabled={saving} onPress={() => void save()}>
+        <Pressable style={[styles.button, { backgroundColor: palette.primary }, saving && styles.disabled]} disabled={saving} onPress={() => void save()}>
           <Ionicons name="save-outline" size={18} color="#FFF" />
           <Text style={styles.buttonText}>{saving ? "Enregistrement…" : "Enregistrer"}</Text>
         </Pressable>

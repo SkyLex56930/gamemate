@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, FlatList, Keyboard, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import type { Session } from "@supabase/supabase-js";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -9,10 +9,13 @@ import { chatName, getMessages, markRead, sendMessage, type Message } from "../l
 import { supabase } from "../lib/supabase";
 import type { MessagesStackParamList } from "../navigation/AppNavigator";
 import { theme } from "../theme/theme";
+import { accentPalettes, useMobilePreferences } from "../lib/mobilePreferences";
 
 type Props = NativeStackScreenProps<MessagesStackParamList, "Chat"> & { session: Session };
 
 export function ChatScreen({ session, navigation, route }: Props) {
+  const { preferences } = useMobilePreferences();
+  const accent = accentPalettes[preferences.accent].primary;
   const { conversationId, profile } = route.params;
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState("");
@@ -21,6 +24,30 @@ export function ChatScreen({ session, navigation, route }: Props) {
   const [error, setError] = useState("");
   const list = useRef<FlatList<Message>>(null);
   const request = useRef(0);
+  const root = useRef<View>(null);
+  const keyboardTop = useRef<number | null>(null);
+  const [keyboardInset, setKeyboardInset] = useState(0);
+
+  const measureKeyboardOverlap = useCallback(() => {
+    if (Platform.OS !== "android" || keyboardTop.current === null) return;
+    root.current?.measureInWindow((_x, y, _width, height) => {
+      const top = Keyboard.metrics()?.screenY ?? keyboardTop.current;
+      if (top !== null) setKeyboardInset(Math.max(0, Math.ceil(y + height - top)));
+    });
+  }, []);
+
+  useEffect(() => {
+    if (Platform.OS !== "android") return;
+    const show = Keyboard.addListener("keyboardDidShow", (event) => {
+      keyboardTop.current = event.endCoordinates.screenY;
+      requestAnimationFrame(measureKeyboardOverlap);
+    });
+    const hide = Keyboard.addListener("keyboardDidHide", () => {
+      keyboardTop.current = null;
+      setKeyboardInset(0);
+    });
+    return () => { show.remove(); hide.remove(); };
+  }, [measureKeyboardOverlap]);
 
   const load = useCallback(async () => {
     const currentRequest = ++request.current;
@@ -73,8 +100,9 @@ export function ChatScreen({ session, navigation, route }: Props) {
     }
   }
 
-  return <SafeAreaView style={styles.root} edges={["bottom"]}>
-    <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === "ios" ? "padding" : "height"}>
+  return <View ref={root} style={styles.root} onLayout={measureKeyboardOverlap}>
+    <SafeAreaView style={[styles.root, Platform.OS === "android" && { paddingBottom: keyboardInset }]} edges={["bottom"]}>
+    <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === "ios" ? "padding" : undefined}>
     <View style={styles.header}>
       <Pressable onPress={() => navigation.goBack()} accessibilityLabel="Retour aux conversations" style={styles.back}>
         <Ionicons name="arrow-back" size={23} color={theme.colors.text} />
@@ -85,28 +113,30 @@ export function ChatScreen({ session, navigation, route }: Props) {
         {!!profile.username && <Text style={styles.handle}>@{profile.username}</Text>}
       </View>
     </View>
-    {loading ? <ActivityIndicator style={styles.loading} color={theme.colors.primary} /> :
+    {loading ? <ActivityIndicator style={styles.loading} color={accent} /> :
       <FlatList ref={list} data={messages} keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.thread}
+        contentContainerStyle={[styles.thread, preferences.density === "compact" && styles.threadCompact]}
         onContentSizeChange={() => list.current?.scrollToEnd({ animated: false })}
         onLayout={() => list.current?.scrollToEnd({ animated: false })}
         ListEmptyComponent={<Text style={styles.empty}>Dis bonjour à {chatName(profile)} !</Text>}
-        renderItem={({ item }) => <View style={[styles.bubble, item.sender_id === session.user.id ? styles.mine : styles.theirs]}>
-          <Text style={styles.body}>{item.body}</Text>
+        renderItem={({ item }) => <View style={[styles.bubble, item.sender_id === session.user.id ? [styles.mine, { backgroundColor: accent }] : styles.theirs]}>
+          <Text style={[styles.body, preferences.messageSize === "large" && styles.bodyLarge]}>{item.body}</Text>
           <Text style={styles.time}>{new Date(item.created_at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</Text>
         </View>}
       />}
     {!!error && <Pressable onPress={() => void load()} style={styles.errorBox}><Text style={styles.error}>{error}</Text></Pressable>}
     <View style={styles.composer}>
       <TextInput style={styles.input} placeholder="Écris un message..." placeholderTextColor={theme.colors.textMuted}
-        value={draft} onChangeText={setDraft} multiline maxLength={4000} />
+        value={draft} onChangeText={setDraft} onFocus={() => requestAnimationFrame(measureKeyboardOverlap)}
+        multiline maxLength={4000} />
       <Pressable onPress={() => void send()} disabled={!draft.trim() || sending}
-        accessibilityLabel="Envoyer le message" style={[styles.send, (!draft.trim() || sending) && styles.disabled]}>
+        accessibilityLabel="Envoyer le message" style={[styles.send, { backgroundColor: accent }, (!draft.trim() || sending) && styles.disabled]}>
         <Ionicons name="send" size={19} color="#FFFFFF" />
       </Pressable>
     </View>
     </KeyboardAvoidingView>
-  </SafeAreaView>;
+    </SafeAreaView>
+  </View>;
 }
 
 const styles = StyleSheet.create({
@@ -118,11 +148,13 @@ const styles = StyleSheet.create({
   handle: { fontSize: 11, color: theme.colors.textSoft },
   loading: { flex: 1 },
   thread: { flexGrow: 1, justifyContent: "flex-end", padding: 14, gap: 8 },
+  threadCompact: { gap: 4, paddingVertical: 8 },
   empty: { textAlign: "center", color: theme.colors.textSoft, marginBottom: 18 },
   bubble: { maxWidth: "83%", borderRadius: 16, paddingHorizontal: 13, paddingVertical: 9 },
   mine: { alignSelf: "flex-end", backgroundColor: theme.colors.primary, borderBottomRightRadius: 5 },
   theirs: { alignSelf: "flex-start", backgroundColor: theme.colors.surfaceSoft, borderBottomLeftRadius: 5 },
   body: { color: theme.colors.text, fontSize: 14, lineHeight: 20 },
+  bodyLarge: { fontSize: 17, lineHeight: 25 },
   time: { color: "#D3D6F7", fontSize: 10, alignSelf: "flex-end", marginTop: 3 },
   errorBox: { padding: 8 },
   error: { color: theme.colors.danger, textAlign: "center" },

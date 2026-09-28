@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { supabase } from "../lib/supabase";
 import { theme } from "../theme/theme";
+import { useAccentPalette } from "../lib/mobilePreferences";
 
 type Friend = {
   id: string;
@@ -14,6 +15,7 @@ type Friend = {
 };
 
 export function FriendsScreen({ session, onMessage }: { session: Session; onMessage: (userId: string) => void }) {
+  const palette = useAccentPalette();
   const insets = useSafeAreaInsets();
   const [friends, setFriends] = useState<Friend[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,7 +66,7 @@ export function FriendsScreen({ session, onMessage }: { session: Session; onMess
 
   return (
     <ScrollView contentContainerStyle={[styles.page, { paddingBottom: insets.bottom + 110 }]}>
-      <Text style={styles.kicker}>SOCIAL</Text>
+      <Text style={[styles.kicker, { color: palette.secondary }]}>SOCIAL</Text>
       <Text style={styles.title}>Amis</Text>
 
       {loading ? (
@@ -91,7 +93,7 @@ export function FriendsScreen({ session, onMessage }: { session: Session; onMess
               <Text style={styles.handle}>@{friend.username ?? "joueur"}</Text>
             </View>
 
-            <Ionicons name="chatbubble-outline" size={21} color={theme.colors.cyan} />
+            <Ionicons name="chatbubble-outline" size={21} color={palette.secondary} />
           </Pressable>
         ))
       )}

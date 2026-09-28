@@ -3,8 +3,10 @@ import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollVie
 import { Ionicons } from "@expo/vector-icons";
 import { supabase } from "../lib/supabase";
 import { theme } from "../theme/theme";
+import { useAccentPalette } from "../lib/mobilePreferences";
 
 export function LoginScreen() {
+  const palette = useAccentPalette();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -29,8 +31,8 @@ export function LoginScreen() {
 
   return <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === "ios" ? "padding" : undefined}>
     <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-      <View style={styles.logo}><Ionicons name="game-controller" size={32} color="#FFFFFF" /></View>
-      <Text style={styles.brand}>GameMate</Text>
+      <View style={[styles.logo, { backgroundColor: palette.primary }]}><Ionicons name="game-controller" size={32} color="#FFFFFF" /></View>
+      <Text style={[styles.brand, { color: palette.secondary }]}>GameMate</Text>
       <Text style={styles.title}>Retrouve tes mates.</Text>
       <Text style={styles.description}>Connecte-toi avec le même compte que sur le Companion.</Text>
       <TextInput style={styles.input} placeholder="E-mail" placeholderTextColor={theme.colors.textMuted}
@@ -40,7 +42,7 @@ export function LoginScreen() {
         value={password} onChangeText={setPassword} secureTextEntry autoCapitalize="none" autoCorrect={false}
         autoComplete="current-password" />
       {!!error && <Text style={styles.error}>{error}</Text>}
-      <Pressable style={[styles.button, busy && styles.disabled]} disabled={busy} onPress={() => void signIn()}>
+      <Pressable style={[styles.button, { backgroundColor: palette.primary }, busy && styles.disabled]} disabled={busy} onPress={() => void signIn()}>
         {busy ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.buttonText}>Se connecter</Text>}
       </Pressable>
     </ScrollView>

@@ -15,6 +15,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { supabase } from "../lib/supabase";
 import { theme } from "../theme/theme";
+import { useAccentPalette } from "../lib/mobilePreferences";
 
 type Player = {
   id: string;
@@ -31,6 +32,7 @@ export function DiscoverScreen({
   session: Session;
   onMessage?: (userId: string) => void;
 }) {
+  const palette = useAccentPalette();
   const insets = useSafeAreaInsets();
   const [query, setQuery] = useState("");
   const [players, setPlayers] = useState<Player[]>([]);
@@ -107,7 +109,7 @@ export function DiscoverScreen({
       contentContainerStyle={[styles.page, { paddingBottom: insets.bottom + 110 }]}
       keyboardShouldPersistTaps="handled"
     >
-      <Text style={styles.kicker}>DÉCOUVERTE</Text>
+      <Text style={[styles.kicker, { color: palette.light }]}>DÉCOUVERTE</Text>
       <Text style={styles.title}>Trouver des mates</Text>
 
       <View style={styles.search}>
@@ -195,7 +197,7 @@ export function DiscoverScreen({
             </Pressable>
 
             <Pressable
-              style={styles.primaryButton}
+              style={[styles.primaryButton, { backgroundColor: palette.primary }]}
               onPress={() => void openMessage(player.id)}
             >
               <Ionicons

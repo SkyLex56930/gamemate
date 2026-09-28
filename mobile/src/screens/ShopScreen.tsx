@@ -12,6 +12,7 @@ import {
 } from "../lib/cosmetics";
 import { supabase } from "../lib/supabase";
 import { theme } from "../theme/theme";
+import { useAccentPalette } from "../lib/mobilePreferences";
 
 type Filter = "all" | "frame" | "banner" | "owned";
 const filters: { key: Filter; label: string }[] = [
@@ -23,6 +24,7 @@ const rarity: Record<Cosmetic["rarity"], string> = {
 };
 
 export function ShopScreen({ session, onBack }: { session: Session; onBack: () => void }) {
+  const palette = useAccentPalette();
   const insets = useSafeAreaInsets();
   const [data, setData] = useState<ShopData | null>(null);
   const [avatar, setAvatar] = useState<{ name: string; url: string | null }>({ name: "Joueur", url: null });
@@ -81,7 +83,7 @@ export function ShopScreen({ session, onBack }: { session: Session; onBack: () =
         <Ionicons name="arrow-back" size={22} color={theme.colors.text} />
       </Pressable>
       <View style={styles.headingText}>
-        <Text style={styles.kicker}>PERSONNALISATION</Text>
+        <Text style={[styles.kicker, { color: palette.secondary }]}>PERSONNALISATION</Text>
         <Text style={styles.title}>Boutique GameMate</Text>
       </View>
     </View>
@@ -90,7 +92,8 @@ export function ShopScreen({ session, onBack }: { session: Session; onBack: () =
     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filters}
       contentContainerStyle={styles.filterContent}>
       {filters.map((option) => <Pressable key={option.key} onPress={() => setFilter(option.key)}
-        style={[styles.filter, filter === option.key && styles.filterActive]} accessibilityRole="button">
+        style={[styles.filter, filter === option.key && styles.filterActive,
+          filter === option.key && { backgroundColor: palette.primary }]} accessibilityRole="button">
         <Text style={[styles.filterText, filter === option.key && styles.filterTextActive]}>{option.label}</Text>
       </Pressable>)}
     </ScrollView>
@@ -99,12 +102,12 @@ export function ShopScreen({ session, onBack }: { session: Session; onBack: () =
       <Text style={styles.error}>{error}</Text>
     </Pressable>}
     {!!notice && <Text style={styles.notice}>{notice}</Text>}
-    {loading && !data ? <ActivityIndicator style={styles.loading} color={theme.colors.primary} /> :
+    {loading && !data ? <ActivityIndicator style={styles.loading} color={palette.primary} /> :
       !data ? null : items.length === 0 ? <Text style={styles.empty}>Aucun objet dans cette catégorie.</Text> :
         items.map((item) => {
           const owned = data?.ownedIds.has(item.id) ?? false;
           const equipped = (item.cosmetic_type === "frame" ? data?.equippedFrameId : data?.equippedBannerId) === item.id;
-          const accent = item.style?.accent || theme.colors.primarySoft;
+          const accent = item.style?.accent || palette.light;
           const key = `equip-${item.cosmetic_type}`;
           return <View key={item.id} style={styles.card}>
             {item.cosmetic_type === "banner" ?
@@ -120,12 +123,12 @@ export function ShopScreen({ session, onBack }: { session: Session; onBack: () =
               </View>}
             <View style={styles.cardBody}>
               <View style={styles.cardTop}>
-                <Text style={styles.kind}>{item.cosmetic_type === "frame" ? "CADRE" : "BANNIÈRE"} · {rarity[item.rarity]}</Text>
+                <Text style={[styles.kind, { color: palette.secondary }]}>{item.cosmetic_type === "frame" ? "CADRE" : "BANNIÈRE"} · {rarity[item.rarity]}</Text>
                 {owned && <Text style={styles.owned}>POSSÉDÉ</Text>}
               </View>
               <Text style={styles.itemName}>{item.name}</Text>
               <Text style={styles.description}>{item.unlock_label || "Cosmétique GameMate"}</Text>
-              {owned ? <Pressable disabled={!!working} style={[styles.action, equipped && styles.actionSecondary]}
+              {owned ? <Pressable disabled={!!working} style={[styles.action, { backgroundColor: palette.primary }, equipped && styles.actionSecondary]}
                 onPress={() => void runAction(key, () => equipCosmetic(equipped ? null : item, item.cosmetic_type),
                   equipped ? "Objet retiré de ton profil." : `${item.name} équipé.`)} accessibilityRole="button">
                 <Text style={styles.actionText}>{working === key ? "Mise à jour…" : equipped ? "Déséquiper" : "Équiper"}</Text>
@@ -149,13 +152,13 @@ export function ShopScreen({ session, onBack }: { session: Session; onBack: () =
         return <View style={styles.objective} key={objective.id}>
           <Text style={styles.objectiveTitle}>{objective.title}</Text>
           <Text style={styles.description}>{objective.description}</Text>
-          <Text style={styles.objectiveProgress}>
+          <Text style={[styles.objectiveProgress, { color: palette.secondary }]}>
             {reward?.name || "Récompense"} · {Math.min(objective.progress, objective.target_value)}/{objective.target_value}
           </Text>
           {objective.completed && !objective.claimed ?
             <Pressable disabled={!!working} onPress={() => void runAction(objective.id,
               () => claimObjective(objective.id), "Récompense ajoutée à tes objets.")}
-              style={styles.claim} accessibilityRole="button">
+              style={[styles.claim, { backgroundColor: palette.primary }]} accessibilityRole="button">
               <Text style={styles.actionText}>{working === objective.id ? "Récupération…" : "Récupérer"}</Text>
             </Pressable> : <Text style={styles.objectiveStatus}>
               {objective.claimed ? "Récompense récupérée" : "En cours"}
