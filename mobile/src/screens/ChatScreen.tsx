@@ -58,12 +58,16 @@ export function ChatScreen({ session, navigation, route }: Props) {
     setSending(true);
     setError("");
     try {
-      await sendMessage(conversationId, session.user.id, body);
+      await sendMessage(conversationId, body);
       setDraft("");
       await load();
     } catch (cause) {
       console.error("Messages / send:", cause);
-      setError("Envoi impossible. Réessaie.");
+      const message = cause instanceof Error ? cause.message : "";
+      setError(message.includes("messaging_muted") ? "Tu ne peux pas envoyer de messages pendant ton mute."
+        : message.includes("account_restricted") ? "Ton compte ne peut pas envoyer de messages actuellement."
+        : message.includes("conversation_blocked") ? "Impossible d'envoyer le message : cette conversation est bloquée."
+        : "Envoi impossible. Réessaie.");
     } finally {
       setSending(false);
     }

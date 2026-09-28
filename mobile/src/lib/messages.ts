@@ -88,11 +88,10 @@ export async function markRead(conversationId: string): Promise<void> {
   if (error) throw error;
 }
 
-export async function sendMessage(conversationId: string, senderId: string, body: string): Promise<void> {
-  const { error } = await supabase.from("messages").insert({
-    conversation_id: conversationId,
-    sender_id: senderId,
-    body,
+export async function sendMessage(conversationId: string, body: string): Promise<void> {
+  const { error } = await supabase.rpc("send_message", {
+    p_conversation_id: conversationId,
+    p_body: body,
   });
   if (error) throw error;
 }

@@ -27,7 +27,7 @@ export type MessagesStackParamList = {
 };
 
 export type ProfileStackParamList = {
-  Profil: undefined;
+  ApercuProfil: undefined;
   Parametres: undefined;
   Boutique: undefined;
 };
@@ -60,7 +60,7 @@ function MessagesStackView({ session, onUnreadChange }: {
 
 function ProfileStackView({ session }: { session: Session }) {
   return <ProfileStack.Navigator screenOptions={{ headerShown: false }}>
-    <ProfileStack.Screen name="Profil">
+    <ProfileStack.Screen name="ApercuProfil">
       {({ navigation }) => <ProfileScreen session={session}
         onSettings={() => navigation.navigate("Parametres")}
         onShop={() => navigation.navigate("Boutique")} />}
@@ -120,7 +120,7 @@ export function AppNavigator({ session }: { session: Session }) {
     if (tab === "Messages") navigation.navigate("Messages", { screen: "Conversations" });
     else if (tab === "Amis") navigation.navigate("Amis");
     else if (tab === "Mates") navigation.navigate("Mates");
-    else navigation.navigate("Profil", { screen: tab === "Boutique" ? "Boutique" : "Profil" });
+    else navigation.navigate("Profil", { screen: tab === "Boutique" ? "Boutique" : "ApercuProfil" });
   }
 
   return <NavigationContainer ref={navigation} theme={{
