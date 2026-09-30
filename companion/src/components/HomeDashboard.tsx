@@ -411,7 +411,7 @@ export default function HomeDashboard({
               {data.conversations.slice(0, 4).map((conversation) => (
                 <button type="button" key={conversation.conversationId} onClick={() => onOpenMessage(conversation.profile.id)}>
                   <DashboardAvatar profile={conversation.profile} />
-                  <span><strong>{profileName(conversation.profile)}</strong><small>{conversation.message?.body ?? "Conversation prête"}</small></span>
+                  <span><strong>{profileName(conversation.profile)}</strong><small>{conversation.message ? messagePreview(conversation.message.body) : "Conversation prête"}</small></span>
                   <em>{conversation.unread > 0 ? conversation.unread : relativeTime(conversation.updatedAt)}</em>
                 </button>
               ))}
@@ -520,6 +520,10 @@ function DashboardSkeleton({ rows }: { rows: number }) {
 
 function profileName(profile: FriendProfile) {
   return profile.display_name || profile.username || "Joueur";
+}
+
+function messagePreview(body: string) {
+  return body.includes("\n[gm-voice:v1]") ? "🎙️ Message vocal" : body;
 }
 
 function relativeTime(value: string) {

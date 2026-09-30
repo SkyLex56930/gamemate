@@ -58,6 +58,8 @@ async function play(path: string, volume: number, playbackRate = 1) {
   }
 }
 
+let lastNavigationSoundAt = 0;
+
 export function playNotificationSound(force = false) {
   if (!force && localStorage.getItem("gamemate-presence-status") === "dnd") return;
   if (!canPlay("receive")) return;
@@ -67,7 +69,7 @@ export function playNotificationSound(force = false) {
 export function playOutgoingCallTone(recipientOnline: boolean) {
   if (!canPlay("receive")) return;
   const volume = effectiveVolume("receive") * (recipientOnline ? 0.42 : 0.3);
-  void play("/sounds/notification-bell.wav", volume, recipientOnline ? 1.12 : 0.62);
+  void play("/sounds/incoming-call.wav", volume, recipientOnline ? 1 : 0.76);
 }
 
 export function playMessageSendSound() {
@@ -77,6 +79,29 @@ export function playMessageSendSound() {
 
 export function testSelectedOutput() {
   return play("/sounds/notification-bell.wav", Math.max(0.2, effectiveVolume("receive")));
+}
+
+export function playNavigationSound() {
+  if (!canPlay("send")) return;
+  const now = Date.now();
+  if (now - lastNavigationSoundAt < 90) return;
+  lastNavigationSoundAt = now;
+  void play("/sounds/ui-navigate.wav", effectiveVolume("send") * 0.32);
+}
+
+export function playSuccessSound() {
+  if (!canPlay("send")) return;
+  void play("/sounds/success.wav", effectiveVolume("send") * 0.62);
+}
+
+export function playVoiceStartSound() {
+  if (!canPlay("send")) return;
+  void play("/sounds/voice-start.wav", effectiveVolume("send") * 0.58);
+}
+
+export function playVoiceStopSound() {
+  if (!canPlay("send")) return;
+  void play("/sounds/voice-stop.wav", effectiveVolume("send") * 0.52);
 }
 
 export const soundPreferenceKeys = {

@@ -19,9 +19,11 @@ import DirectCallManager from "./components/DirectCallManager";
 import HomeDashboard from "./components/HomeDashboard";
 import { Icon, type IconName } from "./components/Icon";
 import { presenceLabel, presenceStorageKeys, readPresenceCustomStatus, readPresenceStatus, type OwnPresenceStatus } from "./lib/presence";
+import { playNavigationSound } from "./lib/audio";
 
 import "./App.css";
 import "./CompanionV8.css";
+import "./Companion2026.css";
 
 type Section = "home" | "play" | "mates" | "squads" | "friends" | "messages" | "profile" | "support" | "settings";
 type UiScale = "compact" | "normal" | "large" | "xlarge";
@@ -105,7 +107,7 @@ type PerformanceSettings = {
   reduceWhenInactive: boolean;
 };
 
-const appWindow = getCurrentWindow();
+const appWindow = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window ? getCurrentWindow() : null;
 const DEFAULT_PERFORMANCE: PerformanceSettings = {
   preset: "high",
   glow: 82,
@@ -566,10 +568,10 @@ function App() {
     navigateTo("home");
   }
 
-  async function minimizeWindow() { await appWindow.minimize(); }
-  async function toggleMaximizeWindow() { await appWindow.toggleMaximize(); }
-  async function closeWindow() { await appWindow.close(); }
-  async function startDragging() { await appWindow.startDragging(); }
+  async function minimizeWindow() { if (appWindow) await appWindow.minimize(); }
+  async function toggleMaximizeWindow() { if (appWindow) await appWindow.toggleMaximize(); }
+  async function closeWindow() { if (appWindow) await appWindow.close(); }
+  async function startDragging() { if (appWindow) await appWindow.startDragging(); }
 
 
   useEffect(() => {
@@ -801,6 +803,7 @@ function App() {
   }, [session?.user?.id]);
 
   function navigateTo(nextSection: Section) {
+    if (nextSection !== section) playNavigationSound();
     setPublicProfileUserId(null);
     setSection(nextSection);
     setNavOpen(false);
@@ -887,6 +890,8 @@ function App() {
               <small>Play. Connect. Improve.</small>
             </span>
           </button>
+
+          <div className="gm-companion-status"><i /><span>COMPANION CONNECTÉ</span><b>LIVE</b></div>
 
           <nav className="gm-nav">
             <div className="gm-nav-group">

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase";
-import { playMessageSendSound } from "../lib/audio";
+import { playMessageSendSound, playSuccessSound, playVoiceStartSound, playVoiceStopSound } from "../lib/audio";
 import { Icon } from "../components/Icon";
 import { presenceActivity, readPresenceStatus, type OwnPresenceStatus, type PresenceSnapshot, type PresenceStatus } from "../lib/presence";
 import "./MessagesPage.css";
@@ -72,6 +72,17 @@ type DirectCallHistory = {
   duration_seconds: number;
 };
 
+type VoiceMessagePayload = {
+  version: 1;
+  path: string;
+  duration: number;
+  mime: string;
+};
+
+const VOICE_BUCKET = "voice-messages";
+const VOICE_MARKER = "\n[gm-voice:v1]";
+const MAX_VOICE_DURATION_SECONDS = 90;
+
 export default function MessagesPage({
   session,
   initialUserId,
@@ -94,6 +105,9 @@ export default function MessagesPage({
   const [loadingList, setLoadingList] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [sending, setSending] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [sendingVoice, setSendingVoice] = useState(false);
   const [error, setError] = useState("");
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const threadBodyRef = useRef<HTMLDivElement | null>(null);
@@ -103,6 +117,13 @@ export default function MessagesPage({
   const messageRequestIdRef = useRef(0);
   const callRequestIdRef = useRef(0);
   const onUnreadCountChangeRef = useRef(onUnreadCountChange);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const recorderStreamRef = useRef<MediaStream | null>(null);
+  const recorderChunksRef = useRef<Blob[]>([]);
+  const recorderStartedAtRef = useRef(0);
+  const recorderIntervalRef = useRef<number | null>(null);
+  const recorderTimeoutRef = useRef<number | null>(null);
+  const cancelRecordingRef = useRef(false);
 
   const userId = session?.user?.id ?? null;
 
@@ -113,6 +134,14 @@ export default function MessagesPage({
   useEffect(() => {
     selectedConversationIdRef.current = selectedConversationId;
   }, [selectedConversationId]);
+
+  useEffect(() => () => {
+    cancelRecordingRef.current = true;
+    if (recorderIntervalRef.current) window.clearInterval(recorderIntervalRef.current);
+    if (recorderTimeoutRef.current) window.clearTimeout(recorderTimeoutRef.current);
+    if (recorderRef.current?.state === "recording") recorderRef.current.stop();
+    recorderStreamRef.current?.getTracks().forEach((track) => track.stop());
+  }, []);
 
   const unreadTotal = useMemo(
     () => conversations.reduce((total, conversation) => total + conversation.unread, 0),
@@ -703,6 +732,148 @@ export default function MessagesPage({
     setSending(false);
   }
 
+  function clearRecorderTimers() {
+    if (recorderIntervalRef.current) window.clearInterval(recorderIntervalRef.current);
+    if (recorderTimeoutRef.current) window.clearTimeout(recorderTimeoutRef.current);
+    recorderIntervalRef.current = null;
+    recorderTimeoutRef.current = null;
+  }
+
+  function releaseRecorderStream() {
+    recorderStreamRef.current?.getTracks().forEach((track) => track.stop());
+    recorderStreamRef.current = null;
+  }
+
+  async function sendVoiceBlob(blob: Blob, duration: number, mime: string, conversationId: string) {
+    if (!conversationId || !userId) return;
+    if (duration < 1 || blob.size < 800) {
+      setError("Le message vocal est trop court.");
+      return;
+    }
+
+    setSendingVoice(true);
+    setError("");
+    const extension = mime.includes("ogg") ? "ogg" : mime.includes("mp4") ? "m4a" : "webm";
+    const path = `${conversationId}/${userId}/${crypto.randomUUID()}.${extension}`;
+    const { error: uploadError } = await supabase.storage
+      .from(VOICE_BUCKET)
+      .upload(path, blob, { cacheControl: "3600", contentType: mime, upsert: false });
+
+    if (uploadError) {
+      console.error("Messages / voice upload:", uploadError);
+      setError("Impossible d’envoyer le vocal. Vérifie l’autorisation micro puis réessaie.");
+      setSendingVoice(false);
+      return;
+    }
+
+    const payload: VoiceMessagePayload = {
+      version: 1,
+      path,
+      duration: Math.min(MAX_VOICE_DURATION_SECONDS, Math.max(1, Math.round(duration))),
+      mime,
+    };
+    const body = `🎙️ Message vocal${VOICE_MARKER}${JSON.stringify(payload)}`;
+    const { error: sendError } = await supabase.rpc("send_message", {
+      p_conversation_id: conversationId,
+      p_body: body,
+    });
+
+    if (sendError) {
+      console.error("Messages / voice send:", sendError);
+      await supabase.storage.from(VOICE_BUCKET).remove([path]);
+      setError(sendError.message.includes("messaging_muted")
+        ? "Tu ne peux pas envoyer de vocal pendant la durée de ton mute."
+        : "Le vocal a été enregistré mais n’a pas pu être envoyé.");
+      setSendingVoice(false);
+      return;
+    }
+
+    forceBottomRef.current = true;
+    stickToBottomRef.current = true;
+    playSuccessSound();
+    await loadMessages(conversationId, true);
+    setSendingVoice(false);
+  }
+
+  async function startVoiceRecording() {
+    if (!selectedConversationId || recording || sendingVoice) return;
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+      setError("L’enregistrement vocal n’est pas disponible sur cet appareil.");
+      return;
+    }
+
+    const recordingConversationId = selectedConversationId;
+    try {
+      setError("");
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      });
+      const supportedMime = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus", "audio/mp4"]
+        .find((value) => MediaRecorder.isTypeSupported(value));
+      const recorder = supportedMime ? new MediaRecorder(stream, { mimeType: supportedMime }) : new MediaRecorder(stream);
+      recorderRef.current = recorder;
+      recorderStreamRef.current = stream;
+      recorderChunksRef.current = [];
+      recorderStartedAtRef.current = Date.now();
+      cancelRecordingRef.current = false;
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) recorderChunksRef.current.push(event.data);
+      };
+      recorder.onstop = () => {
+        clearRecorderTimers();
+        releaseRecorderStream();
+        setRecording(false);
+        const duration = (Date.now() - recorderStartedAtRef.current) / 1000;
+        const blob = new Blob(recorderChunksRef.current, { type: recorder.mimeType || supportedMime || "audio/webm" });
+        recorderChunksRef.current = [];
+        if (!cancelRecordingRef.current) void sendVoiceBlob(blob, duration, blob.type || "audio/webm", recordingConversationId);
+      };
+      recorder.onerror = () => {
+        clearRecorderTimers();
+        releaseRecorderStream();
+        setRecording(false);
+        setError("L’enregistrement du vocal a été interrompu.");
+      };
+
+      recorder.start(250);
+      setRecording(true);
+      setRecordingSeconds(0);
+      playVoiceStartSound();
+      recorderIntervalRef.current = window.setInterval(() => {
+        setRecordingSeconds(Math.min(MAX_VOICE_DURATION_SECONDS, Math.floor((Date.now() - recorderStartedAtRef.current) / 1000)));
+      }, 250);
+      recorderTimeoutRef.current = window.setTimeout(() => {
+        if (recorder.state === "recording") {
+          playVoiceStopSound();
+          recorder.stop();
+        }
+      }, MAX_VOICE_DURATION_SECONDS * 1000);
+    } catch (recordError) {
+      console.error("Messages / microphone:", recordError);
+      releaseRecorderStream();
+      setError("GameMate n’a pas accès au micro. Autorise-le dans Windows puis réessaie.");
+    }
+  }
+
+  function stopVoiceRecording() {
+    const recorder = recorderRef.current;
+    if (!recorder || recorder.state !== "recording") return;
+    playVoiceStopSound();
+    recorder.stop();
+  }
+
+  function cancelVoiceRecording() {
+    cancelRecordingRef.current = true;
+    const recorder = recorderRef.current;
+    if (recorder?.state === "recording") recorder.stop();
+    else {
+      clearRecorderTimers();
+      releaseRecorderStream();
+      setRecording(false);
+    }
+  }
+
   function onComposerKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
     const enterToSend = localStorage.getItem("gamemate-enter-to-send") !== "false";
 
@@ -958,23 +1129,31 @@ export default function MessagesPage({
                 )}
               </div>
 
-              <footer className="messages-composer">
-                <textarea
-                  value={draft}
-                  onChange={(event) => setDraft(event.target.value)}
-                  onKeyDown={onComposerKeyDown}
-                  maxLength={4000}
-                  rows={1}
-                  placeholder={`Écrire à ${profileName(selectedConversation.profile)}...`}
-                />
-                <button
-                  type="button"
-                  disabled={!draft.trim() || sending}
-                  onClick={() => void sendMessage()}
-                  aria-label="Envoyer"
-                >
-                  <Icon name="send" size={18} />
-                </button>
+              <footer className={`messages-composer ${recording ? "is-recording" : ""}`}>
+                {recording ? (
+                  <div className="messages-voice-recorder" role="status" aria-live="polite">
+                    <button type="button" className="cancel" onClick={cancelVoiceRecording} aria-label="Annuler le vocal"><Icon name="trash" size={17} /></button>
+                    <span className="recording-dot" />
+                    <strong>{formatVoiceDuration(recordingSeconds)}</strong>
+                    <div className="recording-wave" aria-hidden="true">{Array.from({ length: 28 }, (_, index) => <i key={index} />)}</div>
+                    <small>90 s max.</small>
+                    <button type="button" className="stop" onClick={stopVoiceRecording} aria-label="Terminer et envoyer le vocal"><span /></button>
+                  </div>
+                ) : (
+                  <>
+                    <button type="button" className="messages-mic-btn" disabled={sendingVoice || sending} onClick={() => void startVoiceRecording()} aria-label="Enregistrer un message vocal" title="Message vocal"><Icon name="mic" size={19} /></button>
+                    <textarea
+                      value={draft}
+                      onChange={(event) => setDraft(event.target.value)}
+                      onKeyDown={onComposerKeyDown}
+                      maxLength={4000}
+                      rows={1}
+                      placeholder={sendingVoice ? "Envoi du vocal…" : `Écrire à ${profileName(selectedConversation.profile)}...`}
+                      disabled={sendingVoice}
+                    />
+                    <button type="button" disabled={!draft.trim() || sending || sendingVoice} onClick={() => void sendMessage()} aria-label="Envoyer"><Icon name="send" size={18} /></button>
+                  </>
+                )}
               </footer>
             </>
           ) : (
@@ -1083,7 +1262,7 @@ function ConversationItem({
           {item.lastMessage ? (
             <>
               {item.lastMessage.sender_id === currentUserId && <i>Toi : </i>}
-              {item.lastMessage.body}
+              {messagePreview(item.lastMessage.body)}
             </>
           ) : (
             "Nouvelle conversation"
@@ -1107,6 +1286,7 @@ function MessageBubble({
   mine: boolean;
   showTime: boolean;
 }) {
+  const voicePayload = parseVoiceMessage(message.body);
   return (
     <>
       {showTime && (
@@ -1116,7 +1296,11 @@ function MessageBubble({
       )}
       <div className={`messages-row ${mine ? "mine" : "theirs"}`}>
         <div className="messages-bubble">
-          <p>{message.body}</p>
+          {voicePayload ? (
+            <VoiceMessagePlayer payload={voicePayload} />
+          ) : (
+            <p>{message.body}</p>
+          )}
           <small>
             {shortTime(message.created_at)}
             {mine && message.read_at ? " · Lu" : ""}
@@ -1125,6 +1309,67 @@ function MessageBubble({
       </div>
     </>
   );
+}
+
+function VoiceMessagePlayer({ payload }: { payload: VoiceMessagePayload }) {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [url, setUrl] = useState("");
+  const [playing, setPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadUrl() {
+      const { data, error } = await supabase.storage.from(VOICE_BUCKET).createSignedUrl(payload.path, 3600);
+      if (cancelled) return;
+      if (error || !data?.signedUrl) setFailed(true);
+      else setUrl(data.signedUrl);
+    }
+    void loadUrl();
+    return () => { cancelled = true; };
+  }, [payload.path]);
+
+  async function togglePlayback() {
+    const audio = audioRef.current;
+    if (!audio || !url) return;
+    if (audio.paused) {
+      try { await audio.play(); setPlaying(true); } catch { setFailed(true); }
+    } else {
+      audio.pause();
+      setPlaying(false);
+    }
+  }
+
+  return (
+    <div className={`messages-voice-player ${failed ? "failed" : ""}`}>
+      <button type="button" onClick={() => void togglePlayback()} disabled={!url || failed} aria-label={playing ? "Mettre le vocal en pause" : "Lire le message vocal"}><Icon name={playing ? "minus" : "play"} size={16} /></button>
+      <div className="voice-waveform" style={{ "--voice-progress": `${progress}%` } as React.CSSProperties}>{Array.from({ length: 24 }, (_, index) => <i key={index} />)}</div>
+      <span>{failed ? "Indisponible" : formatVoiceDuration(Math.max(0, Math.round(payload.duration * (1 - progress / 100))))}</span>
+      {url && <audio ref={audioRef} src={url} preload="metadata" onTimeUpdate={(event) => { const audio = event.currentTarget; setProgress(audio.duration ? (audio.currentTime / audio.duration) * 100 : 0); }} onEnded={() => { setPlaying(false); setProgress(0); }} onPause={() => setPlaying(false)} />}
+    </div>
+  );
+}
+
+function parseVoiceMessage(body: string): VoiceMessagePayload | null {
+  const markerIndex = body.indexOf(VOICE_MARKER);
+  if (markerIndex < 0) return null;
+  try {
+    const value = JSON.parse(body.slice(markerIndex + VOICE_MARKER.length)) as Partial<VoiceMessagePayload>;
+    if (value.version !== 1 || typeof value.path !== "string" || typeof value.duration !== "number" || typeof value.mime !== "string") return null;
+    return value as VoiceMessagePayload;
+  } catch {
+    return null;
+  }
+}
+
+function messagePreview(body: string) {
+  return parseVoiceMessage(body) ? "🎙️ Message vocal" : body;
+}
+
+function formatVoiceDuration(seconds: number) {
+  const safe = Math.max(0, Math.floor(seconds));
+  return `${Math.floor(safe / 60)}:${String(safe % 60).padStart(2, "0")}`;
 }
 
 function Avatar({
