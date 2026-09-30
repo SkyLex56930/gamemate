@@ -36,7 +36,6 @@ export function useMobilePush(session: Session, onOpen: (data: PushData) => void
       if (Platform.OS === "android") {
         await Notifications.setNotificationChannelAsync("gamemate", {
           name: "GameMate", importance: Notifications.AndroidImportance.HIGH,
-          sound: "default",
         });
       }
 

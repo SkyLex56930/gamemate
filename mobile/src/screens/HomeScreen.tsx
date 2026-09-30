@@ -13,7 +13,7 @@ import { useAccentPalette, useMobilePreferences } from "../lib/mobilePreferences
 
 type Props = {
   session: Session;
-  onNavigate: (tab: "Messages" | "Amis" | "Mates" | "Profil" | "Boutique") => void;
+  onNavigate: (tab: "Messages" | "Amis" | "Mates" | "Squads" | "Profil" | "Boutique") => void;
   onOpenConversation: (item: ConversationItem) => void;
   onUnreadChange: (count: number) => void;
   onNotifications: () => void;
@@ -166,6 +166,16 @@ export function HomeScreen({ session, onNavigate, onOpenConversation, onUnreadCh
         <View style={styles.discoverCopy}>
           <Text style={styles.discoverTitle}>Trouver des mates</Text>
           <Text style={styles.discoverDescription}>Découvre des joueurs et commence une discussion.</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={17} color={theme.colors.textSoft} />
+      </Pressable>
+      <Pressable style={styles.discover} onPress={() => onNavigate("Squads")} accessibilityRole="button">
+        <View style={styles.discoverIcon}>
+          <Ionicons name="shield-outline" size={21} color={palette.secondary} />
+        </View>
+        <View style={styles.discoverCopy}>
+          <Text style={styles.discoverTitle}>Ma squad et mon planning</Text>
+          <Text style={styles.discoverDescription}>Retrouve ton équipe et les prochaines parties.</Text>
         </View>
         <Ionicons name="chevron-forward" size={17} color={theme.colors.textSoft} />
       </Pressable>

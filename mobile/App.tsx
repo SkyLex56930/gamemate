@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  AppState,
   Platform,
   StatusBar,
   StyleSheet,
@@ -43,6 +44,18 @@ export default function App() {
     return () => {
       mounted = false;
       data.subscription.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (AppState.currentState === "active") supabase.auth.startAutoRefresh();
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") supabase.auth.startAutoRefresh();
+      else supabase.auth.stopAutoRefresh();
+    });
+    return () => {
+      subscription.remove();
+      supabase.auth.stopAutoRefresh();
     };
   }, []);
 

@@ -4,10 +4,27 @@
     "slug": "gamemate",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "icon": "./assets/gamemate-mark-transparent.png",
+    "userInterfaceStyle": "dark",
     "plugins": [
-      "expo-notifications"
+      "expo-notifications",
+      [
+        "@config-plugins/react-native-webrtc",
+        {
+          "microphonePermission": "GameMate utilise le microphone quand tu rejoins un salon vocal.",
+          "cameraPermission": "GameMate utilise la caméra pendant les appels vidéo."
+        }
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#020716",
+          "image": "./assets/gamemate-logo-transparent.png",
+          "imageWidth": 260,
+          "resizeMode": "contain"
+        }
+      ],
+      "expo-font"
     ],
     "ios": {
       "supportsTablet": true
@@ -15,17 +32,15 @@
     "android": {
       "package": "com.skylex.gamemate",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "backgroundColor": "#020716",
+        "foregroundImage": "./assets/gamemate-mark-transparent.png"
       },
       "softwareKeyboardLayoutMode": "resize",
       "predictiveBackGestureEnabled": false,
       "googleServicesFile": "./google-services.json"
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/gamemate-mark-transparent.png"
     },
     "extra": {
       "eas": {

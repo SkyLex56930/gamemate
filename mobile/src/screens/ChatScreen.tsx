@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, FlatList, Keyboard, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import type { Session } from "@supabase/supabase-js";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -10,6 +10,7 @@ import { supabase } from "../lib/supabase";
 import type { MessagesStackParamList } from "../navigation/AppNavigator";
 import { theme } from "../theme/theme";
 import { accentPalettes, useMobilePreferences } from "../lib/mobilePreferences";
+import { useAndroidKeyboardOverlap } from "../lib/useAndroidKeyboardOverlap";
 
 type Props = NativeStackScreenProps<MessagesStackParamList, "Chat"> & { session: Session };
 
@@ -24,30 +25,7 @@ export function ChatScreen({ session, navigation, route }: Props) {
   const [error, setError] = useState("");
   const list = useRef<FlatList<Message>>(null);
   const request = useRef(0);
-  const root = useRef<View>(null);
-  const keyboardTop = useRef<number | null>(null);
-  const [keyboardInset, setKeyboardInset] = useState(0);
-
-  const measureKeyboardOverlap = useCallback(() => {
-    if (Platform.OS !== "android" || keyboardTop.current === null) return;
-    root.current?.measureInWindow((_x, y, _width, height) => {
-      const top = Keyboard.metrics()?.screenY ?? keyboardTop.current;
-      if (top !== null) setKeyboardInset(Math.max(0, Math.ceil(y + height - top)));
-    });
-  }, []);
-
-  useEffect(() => {
-    if (Platform.OS !== "android") return;
-    const show = Keyboard.addListener("keyboardDidShow", (event) => {
-      keyboardTop.current = event.endCoordinates.screenY;
-      requestAnimationFrame(measureKeyboardOverlap);
-    });
-    const hide = Keyboard.addListener("keyboardDidHide", () => {
-      keyboardTop.current = null;
-      setKeyboardInset(0);
-    });
-    return () => { show.remove(); hide.remove(); };
-  }, [measureKeyboardOverlap]);
+  const { root, keyboardInset, measureKeyboardOverlap } = useAndroidKeyboardOverlap();
 
   const load = useCallback(async () => {
     const currentRequest = ++request.current;

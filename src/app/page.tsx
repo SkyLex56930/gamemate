@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import styles from "./page.module.css";
 
@@ -50,6 +51,18 @@ const copy = {
     statsOnline: "joueurs en ligne",
     statsDownloads: "téléchargements",
     statsVersion: "dernière version",
+    experienceKicker: "UNE EXPÉRIENCE, PARTOUT",
+    experienceTitleBefore: "Ton cercle gaming, ",
+    experienceTitleAccent: "toujours connecté.",
+    experienceText:
+      "Du premier match au prochain rendez-vous, GameMate rassemble tes mates, tes messages et tes squads dans un espace pensé pour jouer — pas pour scroller.",
+    compatibility: "94% compatibles",
+    ready: "PRÊT À JOUER",
+    voiceLive: "Vocal actif",
+    squadLabel: "Squad du soir",
+    platformPc: "Companion PC",
+    platformMobile: "Application mobile",
+    platformShared: "Un seul profil. Les mêmes mates.",
     languageLabel: "Passer le site en anglais",
     footerFeatures: "Fonctionnalités",
     footerDownload: "Télécharger",
@@ -92,6 +105,18 @@ const copy = {
     statsOnline: "players online",
     statsDownloads: "downloads",
     statsVersion: "latest version",
+    experienceKicker: "ONE EXPERIENCE, EVERYWHERE",
+    experienceTitleBefore: "Your gaming circle, ",
+    experienceTitleAccent: "always connected.",
+    experienceText:
+      "From your first match to the next session, GameMate keeps your mates, messages and squads together in a space built for playing — not scrolling.",
+    compatibility: "94% compatible",
+    ready: "READY TO PLAY",
+    voiceLive: "Voice live",
+    squadLabel: "Tonight’s squad",
+    platformPc: "PC Companion",
+    platformMobile: "Mobile app",
+    platformShared: "One profile. The same mates.",
     languageLabel: "Switch the website to French",
     footerFeatures: "Features",
     footerDownload: "Download",
@@ -218,7 +243,7 @@ export default function HomePage() {
     <main className={styles.page}>
       <header className={styles.navbar}>
         <Link href="/" className={styles.brand}>
-          <span className={styles.brandMark}>GM</span>
+          <Image className={styles.brandMark} src="/gamemate-mark-transparent.png" alt="" width={44} height={44} priority />
           <span>Game<span>Mate</span></span>
         </Link>
 
@@ -293,6 +318,79 @@ export default function HomePage() {
         </div>
       </section>
 
+      <section className={styles.experienceSection} aria-labelledby="experience-title">
+        <div className={styles.experienceCopy}>
+          <p className={styles.eyebrow}>{t.experienceKicker}</p>
+          <h2 id="experience-title">
+            {t.experienceTitleBefore}<span>{t.experienceTitleAccent}</span>
+          </h2>
+          <p>{t.experienceText}</p>
+
+          <div className={styles.platforms}>
+            <span><i aria-hidden="true">▣</i>{t.platformPc}</span>
+            <span><i aria-hidden="true">◇</i>{t.platformMobile}</span>
+          </div>
+          <strong className={styles.sharedProfile}>{t.platformShared}</strong>
+        </div>
+
+        <div className={styles.productScene} aria-label="Aperçu de l’expérience GameMate">
+          <div className={styles.sceneGlow} />
+          <div className={styles.orbitRing} />
+
+          <div className={styles.desktopFrame}>
+            <div className={styles.windowBar}>
+              <span /><span /><span />
+              <b>GAMEMATE</b>
+            </div>
+            <div className={styles.appShell}>
+              <aside className={styles.appRail}>
+                <span className={styles.miniLogo}>GM</span>
+                <i className={styles.railActive}>⌂</i>
+                <i>◎</i><i>◇</i><i>◈</i>
+              </aside>
+              <div className={styles.appContent}>
+                <div className={styles.appHeading}>
+                  <div><small>{t.ready}</small><strong>Play Now</strong></div>
+                  <span className={styles.onlinePill}>● 2 online</span>
+                </div>
+                <div className={styles.matchCard}>
+                  <div className={styles.matchAvatar}>LX</div>
+                  <div className={styles.matchIdentity}>
+                    <strong>Lex<span>#5693</span></strong>
+                    <small>Competitive · FR</small>
+                  </div>
+                  <b>{t.compatibility}</b>
+                </div>
+                <div className={styles.squadRow}>
+                  <div><small>{t.squadLabel}</small><strong>Ranked Rush</strong></div>
+                  <div className={styles.avatarStack}><span>A</span><span>N</span><span>K</span><em>+2</em></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className={styles.phoneFrame}>
+            <span className={styles.phoneNotch} />
+            <div className={styles.phoneHeader}><span className={styles.miniLogo}>GM</span><i>●</i></div>
+            <small>{t.ready}</small>
+            <h3>Good evening,<br /><span>Alex.</span></h3>
+            <div className={styles.mobileMatch}>
+              <div className={styles.matchAvatar}>MJ</div>
+              <div><strong>Maya</strong><small>Squad ouverte</small></div>
+              <b>92%</b>
+            </div>
+            <div className={styles.voiceCard}>
+              <span>◉</span>
+              <div><strong>{t.voiceLive}</strong><small>Ranked Rush · 4 mates</small></div>
+              <i>•••</i>
+            </div>
+            <div className={styles.mobileNav}><i>⌂</i><i>◎</i><i>◇</i><i>◈</i></div>
+          </div>
+
+          <div className={styles.floatingChip}><span>⚡</span><b>Match found</b><small>0.8 sec</small></div>
+        </div>
+      </section>
+
       <section id="features" className={styles.featuresSection}>
         <div className={styles.featuresIntro}>
           <p className={styles.eyebrow}>{t.howItWorks}</p>
@@ -337,7 +435,7 @@ export default function HomePage() {
 
       <footer className={styles.footer}>
         <div className={styles.footerBrand}>
-          <span className={styles.brandMark}>GM</span>
+          <Image className={styles.brandMark} src="/gamemate-mark-transparent.png" alt="" width={44} height={44} />
           <strong>Game<span>Mate</span></strong>
         </div>
 

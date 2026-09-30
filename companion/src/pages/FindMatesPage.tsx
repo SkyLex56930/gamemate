@@ -581,7 +581,7 @@ function FilterToggle({ icon, title, description, checked, onChange, disabled = 
 function DiscoveryState({ game, onSearch }: { game: UserGame | null; onSearch: () => void }) {
   return (
     <div className="fmx-discovery-state">
-      <div className="fmx-radar"><span /><i /><b /><img src="/gamemate-logo.png" alt="" /></div>
+      <div className="fmx-radar"><span /><i /><b /><img src="/gamemate-mark-transparent.png" alt="" /></div>
       <span className="fmx-eyebrow">MOTEUR DE MATCHING PRÊT</span>
       <h3>{game ? `Qui te correspond sur ${game.gameName} ?` : "Configure ton premier jeu"}</h3>
       <p>Le score repose uniquement sur de vrais comptes et des informations configurées dans les profils.</p>

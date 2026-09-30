@@ -15,6 +15,7 @@ import { FriendsScreen } from "../screens/FriendsScreen";
 import { MessagesScreen } from "../screens/MessagesScreen";
 import { ChatScreen } from "../screens/ChatScreen";
 import { DiscoverScreen } from "../screens/DiscoverScreen";
+import { SquadsScreen } from "../screens/SquadsScreen";
 import { ProfileScreen } from "../screens/ProfileScreen";
 import { ProfileSettingsScreen } from "../screens/ProfileSettingsScreen";
 import { AppSettingsScreen } from "../screens/AppSettingsScreen";
@@ -24,6 +25,7 @@ import type { ChatProfile, Conversation, ConversationItem } from "../lib/message
 import { theme } from "../theme/theme";
 import { accentPalettes, useMobilePreferences } from "../lib/mobilePreferences";
 import { useMobilePush, type PushStatus } from "../lib/mobilePush";
+import { useSessionReminders } from "../lib/sessionReminders";
 
 type HomeStackParamList = { TableauDeBord: undefined; Notifications: undefined };
 
@@ -44,6 +46,7 @@ type TabParamList = {
   Amis: undefined;
   Messages: NavigatorScreenParams<MessagesStackParamList>;
   Mates: undefined;
+  Squads: { tab?: "planning"; requestId?: number } | undefined;
   Profil: NavigatorScreenParams<ProfileStackParamList>;
 };
 
@@ -68,7 +71,7 @@ function MessagesStackView({ session, onUnreadChange }: {
 
 function HomeStackView({ session, onNavigate, onOpenConversation, onUnreadChange }: {
   session: Session;
-  onNavigate: (tab: "Messages" | "Amis" | "Mates" | "Profil" | "Boutique") => void;
+  onNavigate: (tab: "Messages" | "Amis" | "Mates" | "Squads" | "Profil" | "Boutique") => void;
   onOpenConversation: (item: ConversationItem) => void;
   onUnreadChange: (count: number) => void;
 }) {
@@ -113,6 +116,7 @@ function iconName(name: keyof TabParamList, focused: boolean): keyof typeof Ioni
     case "Amis": return focused ? "people" : "people-outline";
     case "Messages": return focused ? "chatbubbles" : "chatbubbles-outline";
     case "Mates": return focused ? "search" : "search-outline";
+    case "Squads": return focused ? "shield" : "shield-outline";
     case "Profil": return focused ? "person-circle" : "person-circle-outline";
   }
 }
@@ -125,9 +129,15 @@ export function AppNavigator({ session }: { session: Session }) {
   const [unread, setUnread] = useState(0);
   const onUnreadChange = useCallback((count: number) => setUnread(count), []);
   const pendingPush = useRef<Record<string, unknown> | null>(null);
+  const reminderRequest = useRef(0);
 
   const openPush = useCallback(async (data: Record<string, unknown>) => {
     if (!navigation.isReady()) { pendingPush.current = data; return; }
+    if (data.kind === "squad_session_reminder") {
+      reminderRequest.current += 1;
+      navigation.navigate("Squads", { tab: "planning", requestId: reminderRequest.current });
+      return;
+    }
     if (data.kind === "friend_request" || data.kind === "squad_invite") {
       navigation.navigate("Accueil", { screen: "Notifications" });
       return;
@@ -149,6 +159,7 @@ export function AppNavigator({ session }: { session: Session }) {
   }, [navigation]);
 
   const push = useMobilePush(session, openPush);
+  useSessionReminders(session.user.id, push.status);
 
   async function openMessage(userId: string) {
     try {
@@ -176,10 +187,11 @@ export function AppNavigator({ session }: { session: Session }) {
     });
   }
 
-  function goToTab(tab: "Messages" | "Amis" | "Mates" | "Profil" | "Boutique") {
+  function goToTab(tab: "Messages" | "Amis" | "Mates" | "Squads" | "Profil" | "Boutique") {
     if (tab === "Messages") navigation.navigate("Messages", { screen: "Conversations" });
     else if (tab === "Amis") navigation.navigate("Amis");
     else if (tab === "Mates") navigation.navigate("Mates");
+    else if (tab === "Squads") navigation.navigate("Squads", undefined);
     else navigation.navigate("Profil", { screen: tab === "Boutique" ? "Boutique" : "ApercuProfil" });
   }
 
@@ -209,12 +221,13 @@ export function AppNavigator({ session }: { session: Session }) {
         : {
           position: "absolute", left: 16, right: 16, bottom: Math.max(insets.bottom, 16),
           height: 64, paddingTop: 7, paddingBottom: 7, borderTopWidth: 0,
-          borderRadius: 22, backgroundColor: theme.colors.surface,
+          borderRadius: 22, backgroundColor: "#061326", borderWidth: 1,
+          borderColor: "rgba(124, 92, 255, 0.32)",
           elevation: 16, shadowColor: "#000000", shadowOpacity: 0.28,
           shadowRadius: 14, shadowOffset: { width: 0, height: 6 },
         },
-      tabBarItemStyle: { borderRadius: 17, marginHorizontal: 3 },
-      tabBarLabelStyle: { fontSize: 10, fontWeight: "800" },
+      tabBarItemStyle: { borderRadius: 17, marginHorizontal: 1 },
+      tabBarLabelStyle: { fontSize: 9, fontWeight: "800" },
       tabBarIcon: ({ focused, color }) => <Ionicons name={iconName(route.name, focused)} size={22} color={color} />,
     })}>
       <Tabs.Screen name="Accueil">
@@ -229,7 +242,13 @@ export function AppNavigator({ session }: { session: Session }) {
         {() => <MessagesStackView session={session} onUnreadChange={onUnreadChange} />}
       </Tabs.Screen>
       <Tabs.Screen name="Mates">
-        {() => <DiscoverScreen session={session} onMessage={(userId) => { void openMessage(userId); }} />}
+        {() => <DiscoverScreen session={session} onMessage={(userId) => { void openMessage(userId); }}
+          onOpenSquads={() => navigation.navigate("Squads")}
+          onOpenSettings={() => navigation.navigate("Profil", { screen: "Parametres" })}
+          onOpenFriends={() => navigation.navigate("Amis")} />}
+      </Tabs.Screen>
+      <Tabs.Screen name="Squads">
+        {({ route }) => <SquadsScreen session={session} openTab={route.params?.tab} reminderRequestId={route.params?.requestId} />}
       </Tabs.Screen>
       <Tabs.Screen name="Profil">
         {() => <ProfileStackView session={session} pushStatus={push.status} retryPush={push.retry} />}

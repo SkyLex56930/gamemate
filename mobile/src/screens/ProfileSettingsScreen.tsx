@@ -1,5 +1,5 @@
-﻿import { useCallback, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import type { Session } from "@supabase/supabase-js";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
@@ -9,10 +9,14 @@ import { Avatar } from "../components/Avatar";
 import { supabase } from "../lib/supabase";
 import { theme } from "../theme/theme";
 import { useAccentPalette } from "../lib/mobilePreferences";
+import { useAndroidKeyboardOverlap } from "../lib/useAndroidKeyboardOverlap";
+import { MatchPreferencesEditor } from "../components/MatchPreferencesEditor";
 
 export function ProfileSettingsScreen({ session, onBack }: { session: Session; onBack: () => void }) {
   const palette = useAccentPalette();
   const insets = useSafeAreaInsets();
+  const scroll = useRef<ScrollView>(null);
+  const { root, keyboardInset, measureKeyboardOverlap } = useAndroidKeyboardOverlap();
   const [displayName, setDisplayName] = useState("");
   const [username, setUsername] = useState("");
   const [bio, setBio] = useState("");
@@ -21,6 +25,21 @@ export function ProfileSettingsScreen({ session, onBack }: { session: Session; o
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
   const [saving, setSaving] = useState(false);
+  const [catalog, setCatalog] = useState<{ id: number; name: string }[]>([]);
+  const [myGames, setMyGames] = useState<{ game_id: number; platform_id: number | null; is_primary: boolean }[]>([]);
+  const [gameSearch, setGameSearch] = useState("");
+  const [gameBusy, setGameBusy] = useState(false);
+
+  const loadGames = useCallback(async () => {
+    const [catalogResult, ownResult] = await Promise.all([
+      supabase.from("games").select("id,name").eq("is_active", true).order("name"),
+      supabase.from("user_games").select("game_id,platform_id,is_primary").eq("user_id", session.user.id),
+    ]);
+    if (!catalogResult.error) setCatalog((catalogResult.data ?? []) as { id: number; name: string }[]);
+    if (!ownResult.error) setMyGames((ownResult.data ?? []).map((row) => ({
+      game_id: Number(row.game_id), platform_id: row.platform_id == null ? null : Number(row.platform_id), is_primary: Boolean(row.is_primary),
+    })));
+  }, [session.user.id]);
 
   const loadProfile = useCallback(async () => {
     const { data } = await supabase
@@ -37,7 +56,32 @@ export function ProfileSettingsScreen({ session, onBack }: { session: Session; o
     setAvatarUrl(data.avatar_url);
   }, [session.user.id]);
 
-  useFocusEffect(useCallback(() => { void loadProfile(); }, [loadProfile]));
+  useFocusEffect(useCallback(() => { void loadProfile(); void loadGames(); }, [loadProfile, loadGames]));
+  useEffect(() => {
+    if (keyboardInset > 0 && gameSearch) requestAnimationFrame(() => scroll.current?.scrollToEnd({ animated: true }));
+  }, [keyboardInset, gameSearch]);
+
+  async function addGame(gameId: number) {
+    setGameBusy(true); setNotice("");
+    const { error } = await supabase.from("user_games").insert({
+      user_id: session.user.id, game_id: gameId, platform_id: null,
+      is_primary: myGames.length === 0, rank_text: null, role_text: null, mode_text: null,
+      mic_enabled: false, crossplay_enabled: true,
+    });
+    if (error) setNotice("Impossible d’ajouter ce jeu.");
+    else { setGameSearch(""); await loadGames(); }
+    setGameBusy(false);
+  }
+
+  async function removeGame(item: { game_id: number; platform_id: number | null }) {
+    setGameBusy(true); setNotice("");
+    let query = supabase.from("user_games").delete().eq("user_id", session.user.id).eq("game_id", item.game_id);
+    query = item.platform_id === null ? query.is("platform_id", null) : query.eq("platform_id", item.platform_id);
+    const { error } = await query;
+    if (error) setNotice("Impossible de retirer ce jeu.");
+    else await loadGames();
+    setGameBusy(false);
+  }
 
   async function save() {
     if (saving) return;
@@ -68,8 +112,9 @@ export function ProfileSettingsScreen({ session, onBack }: { session: Session; o
     }
   }
 
-  return (
-    <ScrollView contentContainerStyle={[styles.page, { paddingBottom: insets.bottom + 110 }]}>
+  return <View ref={root} style={{ flex: 1 }} onLayout={measureKeyboardOverlap}>
+    <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+    <ScrollView ref={scroll} keyboardShouldPersistTaps="handled" contentContainerStyle={[styles.page, { paddingBottom: insets.bottom + 110 + keyboardInset }]}>
       <View style={styles.header}>
         <Pressable onPress={onBack} style={styles.back} accessibilityRole="button" accessibilityLabel="Retour au profil">
           <Ionicons name="arrow-back" size={22} color={theme.colors.text} />
@@ -132,8 +177,23 @@ export function ProfileSettingsScreen({ session, onBack }: { session: Session; o
           <Text style={styles.buttonText}>{saving ? "Enregistrement…" : "Enregistrer"}</Text>
         </Pressable>
       </View>
+      <View style={styles.card}>
+        <Text style={styles.headerTitle}>Mes jeux</Text>
+        <Text style={styles.label}>Ajoute tes jeux pour trouver des mates et publier des annonces.</Text>
+        {myGames.map((item) => <View key={`${item.game_id}-${item.platform_id}`} style={styles.gameRow}>
+          <Text style={styles.gameName}>{catalog.find((game) => game.id === item.game_id)?.name || "Jeu"}{item.is_primary ? " · Principal" : ""}</Text>
+          <Pressable disabled={gameBusy} onPress={() => void removeGame(item)} accessibilityLabel="Retirer ce jeu"><Ionicons name="close-circle-outline" size={21} color={theme.colors.danger} /></Pressable>
+        </View>)}
+        <TextInput value={gameSearch} onChangeText={setGameSearch} onFocus={() => requestAnimationFrame(() => scroll.current?.scrollToEnd({ animated: true }))} style={styles.input} placeholder="Rechercher un jeu à ajouter" placeholderTextColor={theme.colors.textMuted} />
+        {gameSearch.trim().length >= 2 && catalog.filter((item) => !myGames.some((own) => own.game_id === item.id) && item.name.toLowerCase().includes(gameSearch.trim().toLowerCase())).slice(0, 8).map((item) => <Pressable key={item.id} disabled={gameBusy} onPress={() => void addGame(item.id)} style={styles.gameRow}>
+          <Text style={styles.gameName}>{item.name}</Text><Ionicons name="add-circle-outline" size={21} color={palette.primary} />
+        </Pressable>)}
+        {!!notice && <Text style={styles.notice}>{notice}</Text>}
+      </View>
+      <MatchPreferencesEditor key={myGames.map((item) => `${item.game_id}:${item.platform_id}`).join("|")} userId={session.user.id} catalog={catalog} onGamesChanged={loadGames} />
     </ScrollView>
-  );
+    </KeyboardAvoidingView>
+  </View>;
 }
 
 const styles = StyleSheet.create({
@@ -183,6 +243,8 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     textAlignVertical: "top",
   },
+  gameRow: { minHeight: 40, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
+  gameName: { flex: 1, color: theme.colors.text, fontSize: 13, fontWeight: "700" },
   notice: {
     color: theme.colors.success,
     fontSize: 12,

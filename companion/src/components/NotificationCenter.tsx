@@ -2,12 +2,15 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase";
 import { playNotificationSound } from "../lib/audio";
+import { desktopMessagePreviewEnabled, prepareNativeNotifications, showDesktopNotification } from "../lib/nativeNotifications";
 import { Icon } from "./Icon";
 import "./NotificationCenter.css";
 
 type Props = {
   session: Session | null;
   totalCount: number;
+  showBell?: boolean;
+  onCountsChange?: (counts: { squads: number; mates: number }) => void;
   onOpenFriends: () => void;
   onOpenMessage: (userId: string) => void;
   onOpenSquads: () => void;
@@ -176,6 +179,8 @@ type NotificationItem =
 export default function NotificationCenter({
   session,
   totalCount,
+  showBell = true,
+  onCountsChange,
   onOpenFriends,
   onOpenMessage,
   onOpenSquads,
@@ -204,6 +209,21 @@ export default function NotificationCenter({
   const userId = session?.user?.id ?? null;
   const effectiveTotal = Math.max(0, totalCount - deferredFriendCount) + squadCount + lfgCount;
   const laterCount = laterFriendRequests.length + laterSquadNotifications.length;
+
+  useEffect(() => {
+    onCountsChange?.({ squads: squadCount, mates: lfgCount });
+  }, [squadCount, lfgCount, onCountsChange]);
+
+  useEffect(() => {
+    if (showBell) return;
+    const openNotifications = () => {
+      setAcceptedFriend(null);
+      setView("now");
+      setOpen(true);
+    };
+    window.addEventListener("gamemate:open-notifications", openNotifications);
+    return () => window.removeEventListener("gamemate:open-notifications", openNotifications);
+  }, [showBell]);
 
   const loadSquadCount = useCallback(async () => {
     if (!userId) {
@@ -613,28 +633,68 @@ export default function NotificationCenter({
   }, [session, effectiveTotal]);
 
   useEffect(() => {
+    if (userId) void prepareNativeNotifications();
+  }, [userId]);
+
+  useEffect(() => {
     if (!userId) return;
+    let active = true;
+
+    async function notifyFromPlayer(actorId: string, title: (name: string) => string, body: (name: string) => string) {
+      const { data } = await supabase
+        .from("profiles")
+        .select("display_name, username")
+        .eq("id", actorId)
+        .maybeSingle();
+      if (!active) return;
+      const name = data?.display_name || data?.username || "Un joueur";
+      void showDesktopNotification({ title: title(name), body: body(name) });
+    }
 
     const friendshipChannel = supabase
       .channel(`global-notifications-friends:${userId}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "friendships" }, () => {
+      .on("postgres_changes", { event: "*", schema: "public", table: "friendships" }, (payload) => {
         void loadSquadCount();
         if (open) void loadNotifications();
+        if (payload.eventType !== "INSERT") return;
+        const row = payload.new as Friendship;
+        if (row.addressee_id === userId && row.status === "pending") {
+          void notifyFromPlayer(row.requester_id, () => "Demande d’ami GameMate", (name) => `${name} veut t’ajouter en ami.`);
+        }
       })
       .subscribe();
 
     const messageChannel = supabase
       .channel(`global-notifications-messages:${userId}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "messages" }, () => {
+      .on("postgres_changes", { event: "*", schema: "public", table: "messages" }, (payload) => {
         if (open) void loadNotifications();
+        if (payload.eventType !== "INSERT") return;
+        const row = payload.new as Message;
+        if (row.sender_id === userId) return;
+        void (async () => {
+          const { data: conversation, error } = await supabase
+            .from("conversations")
+            .select("user_a, user_b")
+            .eq("id", row.conversation_id)
+            .maybeSingle();
+          if (!active || error || !conversation || (conversation.user_a !== userId && conversation.user_b !== userId)) return;
+          void notifyFromPlayer(row.sender_id, (name) => `Message de ${name}`, () =>
+            desktopMessagePreviewEnabled() && row.body?.trim() ? row.body.trim().slice(0, 160) : "Tu as reçu un nouveau message."
+          );
+        })();
       })
       .subscribe();
 
     const squadChannel = supabase
       .channel(`global-notifications-squads:${userId}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "squad_invites" }, () => {
+      .on("postgres_changes", { event: "*", schema: "public", table: "squad_invites" }, (payload) => {
         void loadSquadCount();
         if (open) void loadNotifications();
+        if (payload.eventType !== "INSERT") return;
+        const row = payload.new as SquadInvite;
+        if (row.recipient_id === userId && row.status === "pending") {
+          void notifyFromPlayer(row.sender_id, () => "Invitation GameMate", (name) => `${name} t’invite dans un squad.`);
+        }
       })
       .subscribe();
 
@@ -648,9 +708,13 @@ export default function NotificationCenter({
           table: "squad_session_notifications",
           filter: `recipient_id=eq.${userId}`,
         },
-        () => {
+        (payload) => {
           void loadSquadCount();
           if (open) void loadNotifications();
+          if (payload.eventType === "INSERT") {
+            const row = payload.new as SquadSessionNotificationRow;
+            if (row.recipient_id === userId) void showDesktopNotification({ title: row.title, body: row.message });
+          }
         }
       )
       .subscribe();
@@ -665,9 +729,13 @@ export default function NotificationCenter({
           table: "squad_scheduled_session_notifications",
           filter: `recipient_id=eq.${userId}`,
         },
-        () => {
+        (payload) => {
           void loadSquadCount();
           if (open) void loadNotifications();
+          if (payload.eventType === "INSERT") {
+            const row = payload.new as ScheduledSessionNotificationRow;
+            if (row.recipient_id === userId) void showDesktopNotification({ title: row.title, body: row.message });
+          }
         }
       )
       .subscribe();
@@ -698,14 +766,19 @@ export default function NotificationCenter({
           table: "user_notifications_v9",
           filter: `recipient_id=eq.${userId}`,
         },
-        () => {
+        (payload) => {
           void loadSquadCount();
           if (open) void loadNotifications();
+          if (payload.eventType === "INSERT") {
+            const row = payload.new as LfgNotificationRow & { recipient_id: string };
+            if (row.recipient_id === userId) void showDesktopNotification({ title: row.title, body: row.body });
+          }
         }
       )
       .subscribe();
 
     return () => {
+      active = false;
       void supabase.removeChannel(friendshipChannel);
       void supabase.removeChannel(messageChannel);
       void supabase.removeChannel(squadChannel);
@@ -955,7 +1028,7 @@ export default function NotificationCenter({
 
   return (
     <div className="notification-center" ref={rootRef}>
-      <button
+      {showBell && <button
         type="button"
         className={`notification-bell ${open ? "active" : ""}`}
         aria-label="Notifications"
@@ -971,7 +1044,7 @@ export default function NotificationCenter({
             {effectiveTotal > 99 ? "99+" : effectiveTotal}
           </span>
         )}
-      </button>
+      </button>}
 
       {open && (
         <section className="notification-panel">

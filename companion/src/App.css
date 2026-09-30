@@ -1272,7 +1272,6 @@ button{
   .gm-brand>span,
   .gm-nav-label,
   .gm-nav-text,
-  .gm-nav-badge,
   .gm-slogan-card,
   .gm-account-card>span:last-child{
     display:none;
@@ -1286,6 +1285,12 @@ button{
   .gm-nav-item{
     justify-content:center;
     padding:0;
+  }
+
+  .gm-nav-badge{
+    position:absolute;
+    top:2px;
+    right:2px;
   }
 
   .gm-account-card{

@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -20,6 +20,24 @@ export const metadata: Metadata = {
   description:
     "Trouve des joueurs compatibles, forme ta squad et télécharge GameMate gratuitement sur Windows.",
   applicationName: "GameMate",
+  keywords: ["gaming", "mates", "squad", "LFG", "joueurs", "recherche de joueurs"],
+  icons: {
+    icon: "/gamemate-mark-transparent.png",
+    apple: "/gamemate-mark-transparent.png",
+  },
+  openGraph: {
+    title: "GameMate — Trouve tes prochains mates",
+    description: "Match avec des joueurs compatibles, forme ta squad et joue sans rester solo.",
+    type: "website",
+    locale: "fr_FR",
+  },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  themeColor: "#020716",
+  colorScheme: "dark",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

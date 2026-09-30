@@ -1,4 +1,4 @@
-﻿import { useState } from "react";
+import { useState } from "react";
 import { Image, StyleSheet, Text, View } from "react-native";
 import { theme } from "../theme/theme";
 

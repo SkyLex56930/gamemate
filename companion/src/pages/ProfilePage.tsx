@@ -232,7 +232,7 @@ export default function ProfilePage({
         .eq("user_id", session.user.id),
       supabase
         .from("gaming_dna_tags")
-        .select("id, name, category")
+        .select("id, name:label, category")
         .order("category", { ascending: true }),
       supabase
         .from("looking_for_options")

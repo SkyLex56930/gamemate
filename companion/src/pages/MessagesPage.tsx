@@ -979,7 +979,7 @@ export default function MessagesPage({
             </>
           ) : (
             <div className="messages-no-thread">
-              <img src="/gamemate-logo.png" alt="" />
+              <img src="/gamemate-mark-transparent.png" alt="" />
               <strong>Sélectionne une conversation</strong>
               <p>Choisis un mate dans la colonne de gauche pour commencer.</p>
             </div>

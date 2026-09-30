@@ -252,7 +252,7 @@ function Toggle({ label, checked, onChange }: { label: string; checked: boolean;
 }
 
 function SearchingView({ game, intent, onCancel }: { game: UserGame | null; intent: string | null; onCancel: () => void }) {
-  return <section className="pnx-searching"><div className="pnx-search-orbit"><span /><i /><img src="/gamemate-logo.png" alt="" /></div>
+  return <section className="pnx-searching"><div className="pnx-search-orbit"><span /><i /><img src="/gamemate-mark-transparent.png" alt="" /></div>
     <small>RECHERCHE EN COURS</small><h1>{game?.gameName ?? "GameMate"}</h1><p>{intent ? `${intent} · ` : ""}Recherche de profils compatibles.</p>
     <div className="pnx-search-pills"><span>Profils réels</span><span>Filtres actifs</span><span>Matching sécurisé</span></div>
     <button type="button" onClick={onCancel}>Annuler la recherche</button></section>;

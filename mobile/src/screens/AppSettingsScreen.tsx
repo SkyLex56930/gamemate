@@ -3,7 +3,7 @@ import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Switch, 
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { accentPalettes, useMobilePreferences, type Accent } from "../lib/mobilePreferences";
+import { accentPalettes, useMobilePreferences, type Accent, type SessionReminderMinutes } from "../lib/mobilePreferences";
 import { supabase } from "../lib/supabase";
 import { theme } from "../theme/theme";
 import type { PushStatus } from "../lib/mobilePush";
@@ -172,6 +172,14 @@ export function AppSettingsScreen({ onBack, pushStatus, retryPush }: {
       <SettingSwitch title="Invitations d’équipe" hint="Une alerte pour rejoindre une équipe."
         value={preferences.pushInvitations} accent={accent}
         onChange={(pushInvitations) => updatePreferences({ pushInvitations })} />
+      <Text style={styles.optionTitle}>Rappels de parties</Text>
+      <Text style={styles.hint}>Un rappel local pour les sessions où tu es présent ou peut-être.</Text>
+      <View style={styles.choices}>
+        {([0, 15, 30, 60] as SessionReminderMinutes[]).map((minutes) =>
+          <Choice key={minutes} label={minutes === 0 ? "Non" : `${minutes} min`}
+            selected={preferences.sessionReminderMinutes === minutes} accent={accent}
+            onPress={() => updatePreferences({ sessionReminderMinutes: minutes })} />)}
+      </View>
       <SettingSwitch title="Aperçu du message" hint="Affiche le texte sur l’écran verrouillé. Désactivé par défaut."
         value={preferences.showMessagePreview} accent={accent}
         onChange={(showMessagePreview) => updatePreferences({ showMessagePreview })} />

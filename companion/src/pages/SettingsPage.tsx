@@ -3,6 +3,7 @@ import type { Session } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase";
 import { playMessageSendSound, playNotificationSound, soundPreferenceKeys } from "../lib/audio";
 import { audioDevicePreferenceKeys } from "../lib/mediaDevices";
+import { desktopNotificationPreferenceKeys, prepareNativeNotifications } from "../lib/nativeNotifications";
 import AudioDeviceSettings from "../components/AudioDeviceSettings";
 import { Icon, type IconName } from "../components/Icon";
 import {
@@ -80,6 +81,8 @@ const LOCAL_SETTING_KEYS = [
   "gamemate-startup-section",
   "gamemate-navigation-mode",
   "gamemate-notification-badges-enabled",
+  desktopNotificationPreferenceKeys.enabled,
+  desktopNotificationPreferenceKeys.messagePreview,
   "gamemate-sound-enabled",
   "gamemate-notification-sound-enabled",
   "gamemate-message-send-sound-enabled",
@@ -145,6 +148,8 @@ export default function SettingsPage({
   const [savingPresence, setSavingPresence] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(() => readBool(soundPreferenceKeys.all));
   const [notificationSound, setNotificationSound] = useState(() => readBool(soundPreferenceKeys.receive));
+  const [desktopNotifications, setDesktopNotifications] = useState(() => readBool(desktopNotificationPreferenceKeys.enabled));
+  const [desktopMessagePreview, setDesktopMessagePreview] = useState(() => readBool(desktopNotificationPreferenceKeys.messagePreview, false));
   const [messageSendSound, setMessageSendSound] = useState(() => readBool(soundPreferenceKeys.send));
   const [masterVolume, setMasterVolume] = useState(() => readNumber(soundPreferenceKeys.masterVolume, 80));
   const [notificationVolume, setNotificationVolume] = useState(() => readNumber(soundPreferenceKeys.receiveVolume, 70));
@@ -432,6 +437,11 @@ export default function SettingsPage({
               <SettingsPanel index="03" kicker="ROUTAGE" title="Sons et alertes" description="Active séparément les signaux réellement utilisés par GameMate.">
                 <Toggle title="Audio du Companion" description="Interrupteur principal de tous les sons." checked={soundEnabled} onChange={(value) => setSound(soundPreferenceKeys.all, value, setSoundEnabled)} />
                 <Toggle title="Son de notification" description="Joué à la réception d’une notification, sauf en mode Ne pas déranger." checked={notificationSound} disabled={!soundEnabled} actionLabel="Tester" onAction={() => playNotificationSound(true)} onChange={(value) => setSound(soundPreferenceKeys.receive, value, setNotificationSound)} />
+                <Toggle title="Notifications Windows" description="Affiche les messages et invitations quand GameMate n’est pas au premier plan, sauf en mode Ne pas déranger." checked={desktopNotifications} onChange={(value) => {
+                  setSound(desktopNotificationPreferenceKeys.enabled, value, setDesktopNotifications);
+                  if (value) void prepareNativeNotifications();
+                }} />
+                <Toggle title="Aperçu des messages" description="Affiche le texte des messages dans les notifications Windows." checked={desktopMessagePreview} disabled={!desktopNotifications} onChange={(value) => setSound(desktopNotificationPreferenceKeys.messagePreview, value, setDesktopMessagePreview)} />
                 <Toggle title="Confirmation d’envoi" description="Jouée après l’envoi réussi d’un message." checked={messageSendSound} disabled={!soundEnabled} actionLabel="Tester" onAction={playMessageSendSound} onChange={(value) => setSound(soundPreferenceKeys.send, value, setMessageSendSound)} />
                 <Toggle title="Badges visuels" description="Complète les sons avec les compteurs dans l’interface." checked={notificationBadges} onChange={onNotificationBadgesChange} />
               </SettingsPanel>

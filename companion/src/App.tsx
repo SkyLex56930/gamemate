@@ -11,7 +11,6 @@ import ProfilePage from "./pages/ProfilePage";
 import SquadsPage from "./pages/SquadsPage";
 import FriendsPage from "./pages/FriendsPage";
 import MessagesPage from "./pages/MessagesPage";
-import TestModePage from "./pages/TestModePage";
 import SettingsPage, { type AppearanceSettings } from "./pages/SettingsPage";
 import SupportPage from "./pages/SupportPage";
 import NotificationCenter from "./components/NotificationCenter";
@@ -24,7 +23,7 @@ import { presenceLabel, presenceStorageKeys, readPresenceCustomStatus, readPrese
 import "./App.css";
 import "./CompanionV8.css";
 
-type Section = "home" | "play" | "mates" | "squads" | "friends" | "messages" | "profile" | "support" | "settings" | "test";
+type Section = "home" | "play" | "mates" | "squads" | "friends" | "messages" | "profile" | "support" | "settings";
 type UiScale = "compact" | "normal" | "large" | "xlarge";
 type PerfPreset = "eco" | "balanced" | "high" | "ultra" | "custom";
 type NavigationMode = "full" | "compact";
@@ -183,6 +182,7 @@ function App() {
   const [publicProfileUserId, setPublicProfileUserId] = useState<string | null>(null);
   const [pendingFriendRequests, setPendingFriendRequests] = useState(0);
   const [unreadMessages, setUnreadMessages] = useState(0);
+  const [notificationCounts, setNotificationCounts] = useState({ squads: 0, mates: 0 });
   const [openSupportTickets, setOpenSupportTickets] = useState(0);
   const [messageTargetUserId, setMessageTargetUserId] = useState<string | null>(null);
   const [email, setEmail] = useState("");
@@ -478,7 +478,7 @@ function App() {
 
     const { data, error } = await supabase
       .from("gaming_dna_tags")
-      .select("id, name, category")
+      .select("id, name:label, category")
       .in("id", ids);
 
     if (error) {
@@ -806,6 +806,17 @@ function App() {
     setNavOpen(false);
   }
 
+  const handleNotificationCountsChange = useCallback((counts: { squads: number; mates: number }) => {
+    setNotificationCounts((current) => current.squads === counts.squads && current.mates === counts.mates ? current : counts);
+  }, []);
+
+  function openSectionNotifications(nextSection: "mates" | "squads") {
+    navigateTo(nextSection);
+    if (notificationCounts[nextSection] > 0) {
+      window.dispatchEvent(new Event("gamemate:open-notifications"));
+    }
+  }
+
   const displayName = profile?.display_name || profile?.username || session?.user.email || "Compte GameMate";
   const avatarLetter = displayName.slice(0, 1).toUpperCase();
   const profileCompletion = getProfileCompletion({ profile, userGames, gamingDna, availability, lookingFor });
@@ -851,7 +862,7 @@ function App() {
         onDoubleClick={() => void toggleMaximizeWindow()}
       >
         <div className="gm-windowbar-brand">
-          <img src="/gamemate-logo.png" alt="" />
+          <img src="/gamemate-mark-transparent.png" alt="" />
           <strong>GameMate</strong>
           <span>Companion</span>
         </div>
@@ -870,7 +881,7 @@ function App() {
       <div className="gm-app">
         <aside className={`gm-sidebar ${navOpen ? "open" : ""}`}>
           <button className="gm-brand" type="button" onClick={() => navigateTo("home")}>
-            <img src="/gamemate-logo.png" alt="" />
+            <img src="/gamemate-mark-transparent.png" alt="" />
             <span>
               <strong>GameMate</strong>
               <small>Play. Connect. Improve.</small>
@@ -882,12 +893,12 @@ function App() {
               <span className="gm-nav-label">PRINCIPAL</span>
               <NavItem active={section === "home"} icon="home" label="Accueil" onClick={() => navigateTo("home")} />
               <NavItem active={section === "play"} icon="play" label="Play Now" onClick={() => navigateTo("play")} />
-              <NavItem active={section === "mates"} icon="search" label="Trouver des mates" onClick={() => navigateTo("mates")} />
+              <NavItem active={section === "mates"} icon="search" label="Trouver des mates" badge={notificationBadges ? notificationCounts.mates : 0} onClick={() => openSectionNotifications("mates")} />
             </div>
 
             <div className="gm-nav-group">
               <span className="gm-nav-label">SOCIAL</span>
-              <NavItem active={section === "squads"} icon="users" label="Squads" onClick={() => navigateTo("squads")} />
+              <NavItem active={section === "squads"} icon="users" label="Squads" badge={notificationBadges ? notificationCounts.squads : 0} onClick={() => openSectionNotifications("squads")} />
               <NavItem active={section === "friends"} icon="user-check" label="Amis" badge={notificationBadges ? pendingFriendRequests : 0} onClick={() => navigateTo("friends")} />
               <NavItem
                 active={section === "messages"}
@@ -906,7 +917,6 @@ function App() {
               <NavItem active={section === "profile"} icon="user" label="Mon profil" onClick={() => navigateTo("profile")} />
               <NavItem active={section === "support"} icon="life-buoy" label="Support" badge={notificationBadges ? openSupportTickets : 0} onClick={() => navigateTo("support")} />
               <NavItem active={section === "settings"} icon="settings" label="Paramètres" onClick={() => navigateTo("settings")} />
-              <NavItem active={section === "test"} icon="flask" label="Mode test" onClick={() => navigateTo("test")} />
             </div>
           </nav>
 
@@ -957,27 +967,11 @@ function App() {
             </button>
 
             <div className="gm-top-actions">
-              <button type="button" className="gm-icon-btn" onClick={() => navigateTo("friends")} aria-label="Amis">
-                <Icon name="user-check" />
-                {notificationBadges && pendingFriendRequests > 0 && <b>{pendingFriendRequests > 99 ? "99+" : pendingFriendRequests}</b>}
-              </button>
-
-              <button
-                type="button"
-                className="gm-icon-btn"
-                onClick={() => {
-                  setMessageTargetUserId(null);
-                  navigateTo("messages");
-                }}
-                aria-label="Messages"
-              >
-                <Icon name="message-circle" />
-                {notificationBadges && unreadMessages > 0 && <b>{unreadMessages > 99 ? "99+" : unreadMessages}</b>}
-              </button>
-
               <NotificationCenter
                 session={session}
-                totalCount={notificationBadges ? pendingFriendRequests + unreadMessages : 0}
+                totalCount={pendingFriendRequests + unreadMessages}
+                showBell={false}
+                onCountsChange={handleNotificationCountsChange}
                 onOpenFriends={() => navigateTo("friends")}
                 onOpenMessage={(userId) => {
                   setMessageTargetUserId(userId);
@@ -1198,12 +1192,6 @@ function App() {
                   />
                 )}
 
-                {section === "test" && (
-                  <TestModePage
-                    mainSession={session}
-                    mainDisplayName={displayName}
-                  />
-                )}
               </>
             )}
           </main>
@@ -1317,6 +1305,8 @@ function App() {
           connected={Boolean(session)}
           pendingFriendRequests={notificationBadges ? pendingFriendRequests : 0}
           unreadMessages={notificationBadges ? unreadMessages : 0}
+          squadNotifications={notificationBadges ? notificationCounts.squads : 0}
+          mateNotifications={notificationBadges ? notificationCounts.mates : 0}
           openSupportTickets={notificationBadges ? openSupportTickets : 0}
           voiceSession={voiceSession}
           onClose={() => setShowQuickAccess(false)}
@@ -1336,7 +1326,8 @@ function App() {
           onNavigate={(nextSection) => {
             setShowQuickAccess(false);
             if (nextSection === "messages") setMessageTargetUserId(null);
-            navigateTo(nextSection);
+            if (nextSection === "mates" || nextSection === "squads") openSectionNotifications(nextSection);
+            else navigateTo(nextSection);
           }}
         />
       )}
@@ -1361,6 +1352,8 @@ function QuickAccessModal({
   connected,
   pendingFriendRequests,
   unreadMessages,
+  squadNotifications,
+  mateNotifications,
   openSupportTickets,
   voiceSession,
   onClose,
@@ -1372,6 +1365,8 @@ function QuickAccessModal({
   connected: boolean;
   pendingFriendRequests: number;
   unreadMessages: number;
+  squadNotifications: number;
+  mateNotifications: number;
   openSupportTickets: number;
   voiceSession: VoiceSessionSnapshot | null;
   onClose: () => void;
@@ -1387,14 +1382,13 @@ function QuickAccessModal({
     const navigation: QuickAccessAction[] = [
       { id: "home", section: "home", icon: "home", label: "Accueil", description: "Tableau de bord personnalisé", keywords: "accueil dashboard maison" },
       { id: "play", section: "play", icon: "play", label: "Play Now", description: "Préparer une nouvelle session", keywords: "jouer recherche session rapide" },
-      { id: "mates", section: "mates", icon: "search", label: "Trouver des mates", description: "Matching et annonces en direct", keywords: "joueurs lfg matching recherche" },
-      { id: "squads", section: "squads", icon: "users", label: "Squads", description: "Groupe, chat, vocal et planning", keywords: "equipe groupe vocal planning" },
+      { id: "mates", section: "mates", icon: "search", label: "Trouver des mates", description: "Matching et annonces en direct", keywords: "joueurs lfg matching recherche", badge: mateNotifications },
+      { id: "squads", section: "squads", icon: "users", label: "Squads", description: "Groupe, chat, vocal et planning", keywords: "equipe groupe vocal planning", badge: squadNotifications },
       { id: "friends", section: "friends", icon: "user-check", label: "Amis", description: "Amis et demandes reçues", keywords: "amis demandes relations", badge: pendingFriendRequests },
       { id: "messages", section: "messages", icon: "message-circle", label: "Messages", description: "Conversations privées", keywords: "messages chat conversation", badge: unreadMessages },
       { id: "profile", section: "profile", icon: "user", label: "Mon profil", description: "Identité, jeux et disponibilités", keywords: "profil compte jeux disponibilité" },
       { id: "support", section: "support", icon: "life-buoy", label: "Support", description: "Aide et tickets", keywords: "support aide ticket problème", badge: openSupportTickets },
       { id: "settings", section: "settings", icon: "settings", label: "Paramètres", description: "Audio, apparence et système", keywords: "réglages paramètres audio micro apparence" },
-      { id: "test", section: "test", icon: "flask", label: "Mode test", description: "Outils de validation GameMate", keywords: "test diagnostic validation" },
     ];
 
     if (voiceSession) {
@@ -1423,7 +1417,7 @@ function QuickAccessModal({
     }
 
     return navigation;
-  }, [connected, onLogin, onOpenVoice, openSupportTickets, pendingFriendRequests, unreadMessages, voiceSession]);
+  }, [connected, onLogin, onOpenVoice, openSupportTickets, pendingFriendRequests, unreadMessages, squadNotifications, mateNotifications, voiceSession]);
 
   const filteredActions = useMemo(() => {
     const normalizedQuery = normalizeSearch(query.trim());
@@ -1785,7 +1779,7 @@ function CleanLoginModal({
     <div className="gm-modal-backdrop" onMouseDown={onClose}>
       <form className="gm-login-modal" onMouseDown={(event) => event.stopPropagation()} onSubmit={onSubmit}>
         <button type="button" className="gm-modal-close" onClick={onClose} aria-label="Fermer"><Icon name="close" size={18} /></button>
-        <img src="/gamemate-logo.png" alt="" />
+        <img src="/gamemate-logo-transparent.png" alt="GameMate" />
         <span className="gm-eyebrow">GAMEMATE</span>
         <h2>Connexion</h2>
         <p>Connecte-toi à ton compte GameMate.</p>

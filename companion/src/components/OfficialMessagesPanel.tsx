@@ -98,7 +98,7 @@ export default function OfficialMessagesPanel({
     <div className="messages-official-panel">
       <header className="messages-official-head">
         <div className="messages-official-logo">
-          <img src="/gamemate-logo.png" alt="" />
+          <img src="/gamemate-mark-transparent.png" alt="" />
         </div>
         <div>
           <span className="messages-kicker">COMPTE OFFICIEL</span>
@@ -114,7 +114,7 @@ export default function OfficialMessagesPanel({
       <div className="messages-official-body">
         {messages.length === 0 ? (
           <div className="messages-official-empty">
-            <img src="/gamemate-logo.png" alt="" />
+            <img src="/gamemate-mark-transparent.png" alt="" />
             <strong>Aucun message officiel.</strong>
             <p>Les informations importantes de l’équipe GameMate apparaîtront ici.</p>
           </div>

@@ -17,6 +17,7 @@ const eslintConfig = defineConfig([
     "companion/**",
     "launcher/**",
     "mobile/**",
+    "_*_backup/**",
   ]),
 ]);
 

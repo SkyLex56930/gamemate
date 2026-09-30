@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 export type Accent = "violet" | "cyan" | "magenta" | "emerald";
 export type MessageSize = "normal" | "large";
 export type Density = "comfortable" | "compact";
+export type SessionReminderMinutes = 0 | 15 | 30 | 60;
 
 export type MobilePreferences = {
   accent: Accent;
@@ -13,11 +14,12 @@ export type MobilePreferences = {
   pushMessages: boolean;
   pushFriends: boolean;
   pushInvitations: boolean;
+  sessionReminderMinutes: SessionReminderMinutes;
   showMessagePreview: boolean;
 };
 
 export const accentPalettes: Record<Accent, { label: string; primary: string; light: string; secondary: string }> = {
-  violet: { label: "Violet core", primary: "#824CFF", light: "#B496FF", secondary: "#2ADCEA" },
+  violet: { label: "GameMate", primary: "#7C5CFF", light: "#B8A7FF", secondary: "#20DCFF" },
   cyan: { label: "Cyan pulse", primary: "#05B5DA", light: "#69EAF7", secondary: "#7C5CFF" },
   magenta: { label: "Magenta rush", primary: "#DE39C2", light: "#FF8BE2", secondary: "#6864FF" },
   emerald: { label: "Emerald ops", primary: "#15BE89", light: "#69EFBF", secondary: "#23BFE1" },
@@ -25,7 +27,8 @@ export const accentPalettes: Record<Accent, { label: string; primary: string; li
 
 const DEFAULTS: MobilePreferences = {
   accent: "violet", messageSize: "normal", density: "comfortable", messageBadges: true,
-  pushMessages: true, pushFriends: true, pushInvitations: true, showMessagePreview: false,
+  pushMessages: true, pushFriends: true, pushInvitations: true, sessionReminderMinutes: 30,
+  showMessagePreview: false,
 };
 
 const STORAGE_KEY = "gamemate-mobile-preferences-v1";
@@ -49,6 +52,8 @@ function parsePreferences(raw: string | null): MobilePreferences {
       pushMessages: typeof value.pushMessages === "boolean" ? value.pushMessages : true,
       pushFriends: typeof value.pushFriends === "boolean" ? value.pushFriends : true,
       pushInvitations: typeof value.pushInvitations === "boolean" ? value.pushInvitations : true,
+      sessionReminderMinutes: [0, 15, 30, 60].includes(value.sessionReminderMinutes as number)
+        ? value.sessionReminderMinutes as SessionReminderMinutes : 30,
       showMessagePreview: typeof value.showMessagePreview === "boolean" ? value.showMessagePreview : false,
     };
   } catch {
