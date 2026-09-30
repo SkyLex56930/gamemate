@@ -1,453 +1,158 @@
 "use client";
 
-import Link from "next/link";
 import Image from "next/image";
-import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { useEffect, useRef, useState, type PointerEvent, type ReactNode } from "react";
 import styles from "./page.module.css";
 
 type Language = "fr" | "en";
+type IconName = "arrow" | "bolt" | "calendar" | "check" | "download" | "headset" | "heart" | "message" | "people" | "radar" | "shield" | "sparkles" | "windows";
+type PublicStats = { onlineUsers: number; downloads: number; latestVersion: string; downloadUrl: string; publishedAt: string | null };
 
-type PublicStats = {
-  onlineUsers: number;
-  downloads: number;
-  latestVersion: string;
-  downloadUrl: string;
-  publishedAt: string | null;
-};
-
-const FALLBACK_DOWNLOAD =
-  "https://github.com/SkyLex56930/gamemate-releases/releases/latest/download/launcher_x64-setup.exe";
+const FALLBACK_DOWNLOAD = "https://github.com/SkyLex56930/gamemate-releases/releases/latest/download/launcher_x64-setup.exe";
 
 const copy = {
   fr: {
-    navDiscover: "Découvrir",
-    navFeatures: "Fonctionnalités",
-    navDownload: "Télécharger",
-    login: "Se connecter",
-    signup: "Créer un compte",
-    heroTitleBefore: "Trouve tes prochains ",
-    heroTitleAccent: "mates.",
-    heroText:
-      "Trouve des joueurs qui jouent comme toi, quand tu veux jouer. Découvre GameMate librement, puis télécharge le launcher quand tu veux passer à l’action.",
-    heroDownload: "Télécharger GameMate",
-    heroDiscover: "Découvrir",
-    discoveryBefore: "Marre de ",
-    discoveryAccent: "jouer seul ?",
-    discoveryText:
-      "GameMate te met en relation avec des joueurs qui correspondent vraiment à ton jeu, ton niveau, tes horaires et ta manière de jouer.",
-    howItWorks: "COMMENT ÇA MARCHE",
-    featuresBefore: "Tout ce qu’il faut pour ",
-    featuresAccent: "trouver ta team.",
-    featuresText:
-      "Trouve des joueurs compatibles, lance une recherche immédiate, crée tes squads et retrouve les personnes avec qui tu veux rejouer.",
-    downloadBefore: "Prêt à trouver ",
-    downloadAccent: "ta team ?",
-    downloadText:
-      "Télécharge le launcher sans inscription obligatoire. Tu pourras te connecter ou créer ton compte quand tu lanceras réellement GameMate.",
-    downloadWindows: "Télécharger pour Windows",
-    windows: "Windows 64 bits",
-    latest: "Dernière version",
-    released: "Publiée le",
-    statsOnline: "joueurs en ligne",
-    statsDownloads: "téléchargements",
-    statsVersion: "dernière version",
-    experienceKicker: "UNE EXPÉRIENCE, PARTOUT",
-    experienceTitleBefore: "Ton cercle gaming, ",
-    experienceTitleAccent: "toujours connecté.",
-    experienceText:
-      "Du premier match au prochain rendez-vous, GameMate rassemble tes mates, tes messages et tes squads dans un espace pensé pour jouer — pas pour scroller.",
-    compatibility: "94% compatibles",
-    ready: "PRÊT À JOUER",
-    voiceLive: "Vocal actif",
-    squadLabel: "Squad du soir",
-    platformPc: "Companion PC",
-    platformMobile: "Application mobile",
-    platformShared: "Un seul profil. Les mêmes mates.",
-    languageLabel: "Passer le site en anglais",
-    footerFeatures: "Fonctionnalités",
-    footerDownload: "Télécharger",
-    features: [
-      { icon: "◉", title: "Trouver des mates", text: "Choisis ton jeu et trouve des joueurs qui correspondent à ton style, ton niveau et tes envies." },
-      { icon: "⚡", title: "Play Now", text: "Quand tu veux jouer tout de suite, lance une recherche et forme rapidement une équipe." },
-      { icon: "◆", title: "Squads", text: "Crée ton groupe, retrouve tes mates et rejoue facilement avec les bonnes personnes." },
-      { icon: "✦", title: "Gaming DNA", text: "Ton profil de joueur aide GameMate à te proposer des personnes vraiment compatibles." },
-    ],
+    navProduct: "Le produit", navFeatures: "Fonctionnalités", navHow: "Comment ça marche", login: "Connexion", signup: "Créer mon profil",
+    heroBadge: "La rencontre pensée pour les joueurs", heroBefore: "Les bons mates.", heroAccent: "Au bon moment.",
+    heroText: "GameMate comprend ta façon de jouer et te connecte aux joueurs avec qui ça peut vraiment matcher — niveau, vibe et disponibilités compris.",
+    download: "Télécharger GameMate", discover: "Voir comment ça marche", free: "Gratuit · Windows 64 bits", matchLive: "MATCH EN DIRECT", compatibility: "Compatibilité", ready: "Prêt à jouer", voice: "Vocal actif",
+    playersOnline: "joueurs en ligne", downloads: "téléchargements", latest: "version actuelle", socialProof: "Un seul profil pour toute ta vie gaming",
+    productKicker: "PLUS QU’UN MATCHING", productBefore: "Ton cercle gaming,", productAccent: "réuni au même endroit.",
+    productText: "Du premier match à la prochaine session, retrouve tes mates, tes messages et tes squads sur PC comme sur mobile.",
+    appLabel: "COMPANION PC", appTitle: "Ce soir, on ne joue pas solo.", search: "Recherche en cours", found: "3 mates trouvés", squadTonight: "Squad du soir", ranked: "Ranked · 21:30", join: "Rejoindre", mobileLabel: "MOBILE",
+    featureKicker: "TOUT EST CONNECTÉ", featureBefore: "Conçu pour jouer.", featureAccent: "Pas pour scroller.", featureText: "Chaque fonction aide à passer plus vite de « je cherche » à « on lance ».",
+    smartTitle: "Matching intelligent", smartText: "Jeu, rôle, niveau, langue, horaires et état d’esprit : les bons critères, pas juste un pseudo.",
+    squadTitle: "Des squads qui vivent", squadText: "Salons, vocal et sessions planifiées pour garder le groupe actif après le premier match.",
+    everywhereTitle: "Toujours avec ta team", everywhereText: "Continue la conversation sur mobile et retrouve toute ta communauté sur PC.",
+    safeTitle: "À toi de choisir", safeText: "Ton profil, tes disponibilités et tes préférences restent sous ton contrôle.",
+    stepsKicker: "SIMPLE PAR DESIGN", stepsBefore: "Solo maintenant.", stepsAccent: "En squad dans 3 étapes.",
+    steps: [["01", "Crée ton Gaming DNA", "Dis-nous à quoi tu joues, comment et quand."], ["02", "Découvre tes matches", "GameMate classe les profils vraiment compatibles."], ["03", "Lance la session", "Message, squad, vocal : tout est déjà prêt."]],
+    ctaKicker: "TON PROCHAIN GG COMMENCE ICI", ctaBefore: "Prêt à rencontrer", ctaAccent: "ta prochaine team ?", ctaText: "Télécharge le Launcher GameMate et commence gratuitement.",
+    version: "Dernière version", released: "publiée le", footerLine: "Good players. Better people.", languageLabel: "Passer le site en anglais",
   },
   en: {
-    navDiscover: "Discover",
-    navFeatures: "Features",
-    navDownload: "Download",
-    login: "Sign in",
-    signup: "Create account",
-    heroTitleBefore: "Find your next ",
-    heroTitleAccent: "mates.",
-    heroText:
-      "Find players who play like you, when you want to play. Explore GameMate freely, then download the launcher whenever you are ready.",
-    heroDownload: "Download GameMate",
-    heroDiscover: "Discover",
-    discoveryBefore: "Tired of ",
-    discoveryAccent: "playing alone?",
-    discoveryText:
-      "GameMate connects you with players who truly match your game, skill level, schedule and playstyle.",
-    howItWorks: "HOW IT WORKS",
-    featuresBefore: "Everything you need to ",
-    featuresAccent: "find your team.",
-    featuresText:
-      "Find compatible players, start an instant search, create squads and reconnect with people you want to play with again.",
-    downloadBefore: "Ready to find ",
-    downloadAccent: "your team?",
-    downloadText:
-      "Download the launcher without mandatory signup. You can sign in or create your account when you actually launch GameMate.",
-    downloadWindows: "Download for Windows",
-    windows: "Windows 64-bit",
-    latest: "Latest version",
-    released: "Released",
-    statsOnline: "players online",
-    statsDownloads: "downloads",
-    statsVersion: "latest version",
-    experienceKicker: "ONE EXPERIENCE, EVERYWHERE",
-    experienceTitleBefore: "Your gaming circle, ",
-    experienceTitleAccent: "always connected.",
-    experienceText:
-      "From your first match to the next session, GameMate keeps your mates, messages and squads together in a space built for playing — not scrolling.",
-    compatibility: "94% compatible",
-    ready: "READY TO PLAY",
-    voiceLive: "Voice live",
-    squadLabel: "Tonight’s squad",
-    platformPc: "PC Companion",
-    platformMobile: "Mobile app",
-    platformShared: "One profile. The same mates.",
-    languageLabel: "Switch the website to French",
-    footerFeatures: "Features",
-    footerDownload: "Download",
-    features: [
-      { icon: "◉", title: "Find mates", text: "Pick your game and find players who match your style, skill level and goals." },
-      { icon: "⚡", title: "Play Now", text: "When you want to play right away, launch a search and quickly build a team." },
-      { icon: "◆", title: "Squads", text: "Create your group, find your mates again and easily replay with the right people." },
-      { icon: "✦", title: "Gaming DNA", text: "Your player profile helps GameMate suggest people who are genuinely compatible with you." },
-    ],
+    navProduct: "Product", navFeatures: "Features", navHow: "How it works", login: "Sign in", signup: "Create my profile",
+    heroBadge: "The social app built for players", heroBefore: "The right mates.", heroAccent: "At the right time.",
+    heroText: "GameMate understands how you play and connects you with people you can truly click with — skill, vibe and availability included.",
+    download: "Download GameMate", discover: "See how it works", free: "Free · Windows 64-bit", matchLive: "LIVE MATCH", compatibility: "Compatibility", ready: "Ready to play", voice: "Voice live",
+    playersOnline: "players online", downloads: "downloads", latest: "current version", socialProof: "One profile for your whole gaming life",
+    productKicker: "MORE THAN MATCHING", productBefore: "Your gaming circle,", productAccent: "all in one place.",
+    productText: "From the first match to the next session, keep your mates, messages and squads close on PC and mobile.",
+    appLabel: "PC COMPANION", appTitle: "Tonight, nobody plays solo.", search: "Searching now", found: "3 mates found", squadTonight: "Tonight’s squad", ranked: "Ranked · 9:30 PM", join: "Join", mobileLabel: "MOBILE",
+    featureKicker: "EVERYTHING CONNECTS", featureBefore: "Built for playing.", featureAccent: "Not scrolling.", featureText: "Every feature gets you from “looking” to “launching” faster.",
+    smartTitle: "Smart matching", smartText: "Game, role, skill, language, schedule and mindset — the right signals, not just a username.",
+    squadTitle: "Squads that stay alive", squadText: "Channels, voice and planned sessions keep the group active beyond the first match.",
+    everywhereTitle: "Always with your team", everywhereText: "Keep chatting on mobile and find your whole community back on PC.",
+    safeTitle: "You stay in control", safeText: "Your profile, availability and preferences remain yours to manage.",
+    stepsKicker: "SIMPLE BY DESIGN", stepsBefore: "Solo right now.", stepsAccent: "Squadded in 3 steps.",
+    steps: [["01", "Build your Gaming DNA", "Tell us what, how and when you play."], ["02", "Discover your matches", "GameMate ranks the players who truly fit."], ["03", "Launch the session", "Message, squad and voice are already there."]],
+    ctaKicker: "YOUR NEXT GG STARTS HERE", ctaBefore: "Ready to meet", ctaAccent: "your next team?", ctaText: "Download the GameMate Launcher and start for free.",
+    version: "Latest version", released: "released", footerLine: "Good players. Better people.", languageLabel: "Switch the website to French",
   },
 } as const;
 
-function clamp(value: number, min = 0, max = 1) {
-  return Math.min(Math.max(value, min), max);
+function Icon({ name }: { name: IconName }) {
+  const paths: Record<IconName, ReactNode> = {
+    arrow: <><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></>, bolt: <path d="m13 2-9 12h8l-1 8 9-12h-8z"/>,
+    calendar: <><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 10h18"/></>, check: <path d="m5 12 4 4L19 6"/>,
+    download: <><path d="M12 3v12m0 0 5-5m-5 5-5-5"/><path d="M5 21h14"/></>, headset: <><path d="M4 14v-2a8 8 0 0 1 16 0v2"/><path d="M4 14a2 2 0 0 1 2-2h1v7H6a2 2 0 0 1-2-2Zm16 0a2 2 0 0 0-2-2h-1v7h1a2 2 0 0 0 2-2Z"/></>,
+    heart: <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1.1L12 21l7.8-7.5 1.1-1.1a5.5 5.5 0 0 0-.1-7.8Z"/>, message: <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4Z"/>,
+    people: <><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></>, radar: <><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/><path d="m12 12 6-6"/></>,
+    shield: <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/>, sparkles: <><path d="m12 3-1.4 3.6L7 8l3.6 1.4L12 13l1.4-3.6L17 8l-3.6-1.4Z"/><path d="m5 14-.8 2.2L2 17l2.2.8L5 20l.8-2.2L8 17l-2.2-.8ZM19 14l-.8 2.2L16 17l2.2.8L19 20l.8-2.2L22 17l-2.2-.8Z"/></>,
+    windows: <><path d="M3 5.5 11 4v7H3Zm10-1.8L21 2.5V11h-8ZM3 13h8v7l-8-1.4Zm10 0h8v8.5l-8-1.2Z"/></>,
+  };
+  return <svg viewBox="0 0 24 24" aria-hidden="true">{paths[name]}</svg>;
 }
 
 export default function HomePage() {
-  const cinematicRef = useRef<HTMLElement | null>(null);
-  const stickyRef = useRef<HTMLDivElement | null>(null);
+  const sceneRef = useRef<HTMLDivElement | null>(null);
   const [lang, setLang] = useState<Language>("fr");
-  const [stats, setStats] = useState<PublicStats>({
-    onlineUsers: 0,
-    downloads: 0,
-    latestVersion: "—",
-    downloadUrl: FALLBACK_DOWNLOAD,
-    publishedAt: null,
-  });
-
+  const [stats, setStats] = useState<PublicStats>({ onlineUsers: 0, downloads: 0, latestVersion: "—", downloadUrl: FALLBACK_DOWNLOAD, publishedAt: null });
   const t = copy[lang];
 
   useEffect(() => {
     const saved = window.localStorage.getItem("gamemate-site-language");
-    const preferredLanguage =
-      saved === "fr" || saved === "en"
-        ? saved
-        : navigator.language.toLowerCase().startsWith("fr")
-          ? "fr"
-          : "en";
-
-    const updateLanguage = window.setTimeout(() => setLang(preferredLanguage), 0);
-    return () => window.clearTimeout(updateLanguage);
+    const preferred = saved === "fr" || saved === "en" ? saved : navigator.language.toLowerCase().startsWith("fr") ? "fr" : "en";
+    const timer = window.setTimeout(() => setLang(preferred), 0);
+    return () => window.clearTimeout(timer);
   }, []);
-
-  useEffect(() => {
-    window.localStorage.setItem("gamemate-site-language", lang);
-    document.documentElement.lang = lang;
-  }, [lang]);
-
+  useEffect(() => { window.localStorage.setItem("gamemate-site-language", lang); document.documentElement.lang = lang; }, [lang]);
   useEffect(() => {
     let cancelled = false;
-
-    async function loadStats() {
-      try {
-        const response = await fetch("/api/public-stats", { cache: "no-store" });
-        if (!response.ok) return;
-        const data = (await response.json()) as PublicStats;
-        if (!cancelled) setStats(data);
-      } catch {}
-    }
-
-    void loadStats();
-    const timer = window.setInterval(() => void loadStats(), 60_000);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
+    async function loadStats() { try { const response = await fetch("/api/public-stats", { cache: "no-store" }); if (!response.ok) return; const data = await response.json() as PublicStats; if (!cancelled) setStats(data); } catch {} }
+    void loadStats(); const timer = window.setInterval(() => void loadStats(), 60_000);
+    return () => { cancelled = true; window.clearInterval(timer); };
   }, []);
 
-  useEffect(() => {
-    let raf = 0;
+  const onSceneMove = (event: PointerEvent<HTMLDivElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    sceneRef.current?.style.setProperty("--mx", ((((event.clientX - rect.left) / rect.width) - 0.5) * 2).toFixed(3));
+    sceneRef.current?.style.setProperty("--my", ((((event.clientY - rect.top) / rect.height) - 0.5) * 2).toFixed(3));
+  };
+  const resetScene = () => { sceneRef.current?.style.setProperty("--mx", "0"); sceneRef.current?.style.setProperty("--my", "0"); };
+  const formatNumber = (value: number) => new Intl.NumberFormat(lang === "fr" ? "fr-FR" : "en-GB").format(value);
+  const publishedLabel = stats.publishedAt && new Intl.DateTimeFormat(lang === "fr" ? "fr-FR" : "en-GB", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(stats.publishedAt));
 
-    const update = () => {
-      raf = 0;
-      const section = cinematicRef.current;
-      const sticky = stickyRef.current;
-      if (!section || !sticky) return;
+  return <main className={styles.page}>
+    <header className={styles.navbar}>
+      <Link href="/" className={styles.brand} aria-label="GameMate"><span className={styles.brandMark}><Image src="/gamemate-mark-transparent.png" alt="" width={46} height={46} priority /></span><span className={styles.wordmark}>Game<b>Mate</b></span></Link>
+      <nav className={styles.navLinks} aria-label="Navigation principale"><a href="#product">{t.navProduct}</a><a href="#features">{t.navFeatures}</a><a href="#how">{t.navHow}</a></nav>
+      <div className={styles.navActions}><button className={styles.languageButton} type="button" onClick={() => setLang(lang === "fr" ? "en" : "fr")} aria-label={t.languageLabel}>{lang.toUpperCase()}</button><Link href="/login" className={styles.login}>{t.login}</Link><Link href="/signup" className={styles.signup}>{t.signup}<Icon name="arrow" /></Link></div>
+    </header>
 
-      const rect = section.getBoundingClientRect();
-      const scrollable = section.offsetHeight - window.innerHeight;
-      if (scrollable <= 0) return;
-
-      const progress = clamp(-rect.top / scrollable);
-      const heroOpacity = 1 - clamp((progress - 0.14) / 0.22);
-      const secondOpacity = clamp((progress - 0.20) / 0.22);
-      const secondContentOpacity = clamp((progress - 0.34) / 0.18);
-
-      sticky.style.setProperty("--hero-opacity", String(heroOpacity));
-      sticky.style.setProperty("--second-opacity", String(secondOpacity));
-      sticky.style.setProperty("--second-content-opacity", String(secondContentOpacity));
-      sticky.style.setProperty("--hero-scale", String(1 + progress * 0.045));
-      sticky.style.setProperty("--second-scale", String(1.045 - progress * 0.025));
-      sticky.style.setProperty("--progress", String(progress));
-    };
-
-    const schedule = () => {
-      if (raf) return;
-      raf = requestAnimationFrame(update);
-    };
-
-    update();
-    window.addEventListener("scroll", schedule, { passive: true });
-    window.addEventListener("resize", schedule);
-
-    return () => {
-      if (raf) cancelAnimationFrame(raf);
-      window.removeEventListener("scroll", schedule);
-      window.removeEventListener("resize", schedule);
-    };
-  }, []);
-
-  const publishedLabel =
-    stats.publishedAt &&
-    new Intl.DateTimeFormat(lang === "fr" ? "fr-FR" : "en-GB", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    }).format(new Date(stats.publishedAt));
-
-  const formatNumber = (value: number) =>
-    new Intl.NumberFormat(lang === "fr" ? "fr-FR" : "en-GB").format(value);
-
-  return (
-    <main className={styles.page}>
-      <header className={styles.navbar}>
-        <Link href="/" className={styles.brand}>
-          <Image className={styles.brandMark} src="/gamemate-mark-transparent.png" alt="" width={44} height={44} priority />
-          <span>Game<span>Mate</span></span>
-        </Link>
-
-        <nav className={styles.navLinks} aria-label="Navigation principale">
-          <a href="#discover">{t.navDiscover}</a>
-          <a href="#features">{t.navFeatures}</a>
-          <a href="#download">{t.navDownload}</a>
-        </nav>
-
-        <div className={styles.navActions}>
-          <button
-            type="button"
-            className={styles.languageButton}
-            onClick={() => setLang((current) => (current === "fr" ? "en" : "fr"))}
-            aria-label={t.languageLabel}
-            title={t.languageLabel}
-          >
-            <span>{lang.toUpperCase()}</span>
-            <b>{lang === "fr" ? "EN" : "FR"}</b>
-          </button>
-
-          <Link href="/login" className={styles.login}>{t.login}</Link>
-          <Link href="/signup" className={styles.signup}>{t.signup}</Link>
+    <section className={styles.hero}>
+      <div className={styles.aurora} aria-hidden="true"/><div className={styles.noise} aria-hidden="true"/>
+      <div className={styles.heroGrid}>
+        <div className={styles.heroCopy}>
+          <div className={styles.heroBadge}><span><Icon name="sparkles" /></span>{t.heroBadge}</div><h1><span>{t.heroBefore}</span><strong>{t.heroAccent}</strong></h1><p>{t.heroText}</p>
+          <div className={styles.heroActions}><a href={stats.downloadUrl || FALLBACK_DOWNLOAD} className={styles.primaryButton}><Icon name="windows" />{t.download}<span><Icon name="download" /></span></a><a href="#product" className={styles.textButton}>{t.discover}<Icon name="arrow" /></a></div>
+          <div className={styles.heroMeta}><span><Icon name="check" />{t.free}</span><span className={styles.avatarMini}><i>MK</i><i>JL</i><i>+9</i></span></div>
         </div>
-      </header>
-
-      <section ref={cinematicRef} className={styles.cinematic}>
-        <div ref={stickyRef} className={styles.cinematicSticky}>
-          <div className={styles.heroLayer} />
-          <div className={styles.heroShade} />
-          <div className={styles.secondLayer} />
-          <div className={styles.secondShade} />
-          <div className={styles.transitionFlash} />
-
-          <div className={styles.heroContent}>
-            <p className={styles.eyebrow}>PLAY · CONNECT · BELONG</p>
-            <h1>{t.heroTitleBefore}<span>{t.heroTitleAccent}</span></h1>
-            <p className={styles.heroText}>{t.heroText}</p>
-
-            <div className={styles.heroButtons}>
-              <a href="#download" className={styles.primaryButton}>{t.heroDownload}</a>
-              <a href="#discover" className={styles.secondaryButton}>{t.heroDiscover}</a>
-            </div>
-          </div>
-
-          <div id="discover" className={styles.discoveryContent}>
-            <p className={styles.eyebrow}>GAMEMATE</p>
-            <h2>{t.discoveryBefore}<span>{t.discoveryAccent}</span></h2>
-            <p>{t.discoveryText}</p>
-          </div>
-
-          <div className={styles.progressRail} aria-hidden="true"><span /></div>
+        <div ref={sceneRef} className={styles.matchScene} onPointerMove={onSceneMove} onPointerLeave={resetScene}>
+          <div className={styles.sceneFloor}/><div className={styles.sceneHalo}/><div className={styles.orbit}><span/><span/><span/><span/></div>
+          <div className={styles.core}><div className={styles.coreGlow}/><Image src="/gamemate-mark-transparent.png" alt="" width={152} height={152} priority/><div className={styles.corePulse}/></div>
+          <div className={`${styles.playerCard} ${styles.playerOne}`}><div className={styles.playerAvatar}>NO</div><div><strong>NOVA</strong><small>Support · FR</small></div><b>96%</b></div>
+          <div className={`${styles.playerCard} ${styles.playerTwo}`}><div className={styles.playerAvatar}>KY</div><div><strong>KAYO</strong><small>Duelist · EU</small></div><b>91%</b></div>
+          <div className={`${styles.playerCard} ${styles.playerThree}`}><div className={styles.playerAvatar}>MX</div><div><strong>MIXX</strong><small>Flex · FR</small></div><b>88%</b></div>
+          <div className={styles.liveMatch}><span/><div><small>{t.matchLive}</small><strong>Valorant · Ranked</strong></div></div>
+          <div className={styles.compatibility}><small>{t.compatibility}</small><strong>94<span>%</span></strong><div><i/></div></div><div className={styles.gameTag}>VALORANT</div><div className={styles.gameTagAlt}>21:30 · EU WEST</div>
         </div>
-      </section>
+      </div><div className={styles.scrollCue}><span>SCROLL</span><i/></div>
+    </section>
 
-      <section className={styles.liveStats} aria-label="GameMate live">
-        <div className={styles.liveStatsInner}>
-          <article className={styles.liveStat}>
-            <span className={styles.liveDot} aria-hidden="true" />
-            <div><strong>{formatNumber(stats.onlineUsers)}</strong><small>{t.statsOnline}</small></div>
-          </article>
+    <section className={styles.statsStrip} aria-label="GameMate live"><p>{t.socialProof}</p><div className={styles.statsItems}><span><i className={styles.liveDot}/><strong>{formatNumber(stats.onlineUsers)}</strong>{t.playersOnline}</span><span><Icon name="download"/><strong>{formatNumber(stats.downloads)}</strong>{t.downloads}</span><span><Icon name="bolt"/><strong>{stats.latestVersion}</strong>{t.latest}</span></div></section>
 
-          <article className={styles.liveStat}>
-            <span className={styles.statIcon} aria-hidden="true">↓</span>
-            <div><strong>{formatNumber(stats.downloads)}</strong><small>{t.statsDownloads}</small></div>
-          </article>
-
-          <article className={styles.liveStat}>
-            <span className={styles.statIcon} aria-hidden="true">◆</span>
-            <div><strong>{stats.latestVersion}</strong><small>{t.statsVersion}</small></div>
-          </article>
+    <section id="product" className={styles.productSection}>
+      <div className={styles.sectionIntro}><div><p className={styles.kicker}>{t.productKicker}</p><h2>{t.productBefore}<br/><span>{t.productAccent}</span></h2></div><p>{t.productText}</p></div>
+      <div className={styles.productStage}><div className={styles.stageGlow}/>
+        <div className={styles.desktopMockup}><div className={styles.windowTop}><div><i/><i/><i/></div><span>GAMEMATE COMPANION</span><b>—　□　×</b></div><div className={styles.desktopBody}>
+          <aside className={styles.appSidebar}><Image src="/gamemate-mark-transparent.png" alt="" width={38} height={38}/><span className={styles.activeNav}><Icon name="radar"/></span><span><Icon name="people"/></span><span><Icon name="message"/></span><span><Icon name="calendar"/></span><em>AM</em></aside>
+          <div className={styles.appPanel}><div className={styles.appPanelTop}><div><small>{t.appLabel}</small><h3>{t.appTitle}</h3></div><span><i/> 12 online</span></div>
+            <div className={styles.searchCard}><div className={styles.radarMini}><i/><i/><i/></div><div><small>{t.search}</small><strong>Valorant · Ranked · Diamond</strong><span><i/>{t.found}</span></div><button aria-label={t.join}><Icon name="arrow"/></button></div>
+            <div className={styles.appColumns}><div className={styles.matesList}><div className={styles.panelHeading}><strong>Mates</strong><span>Voir tout</span></div>{[["N","Nova","96%"],["K","Kayo","91%"],["M","Mixx","88%"]].map(mate => <div className={styles.mateRow} key={mate[1]}><i>{mate[0]}</i><div><strong>{mate[1]}</strong><small>{t.ready}</small></div><b>{mate[2]}</b></div>)}</div>
+              <div className={styles.squadPanel}><div className={styles.panelHeading}><strong>{t.squadTonight}</strong><Icon name="headset"/></div><div className={styles.squadOrb}><span>R</span><i/><i/><i/></div><h4>Ranked Rush</h4><p>{t.ranked}</p><button><Icon name="headset"/>{t.join}</button></div></div>
+          </div></div></div>
+        <div className={styles.phoneMockup}><div className={styles.phoneIsland}/><div className={styles.phoneStatus}><b>9:41</b><span>● ◒ ▰</span></div><div className={styles.phoneBrand}><Image src="/gamemate-mark-transparent.png" alt="" width={32} height={32}/><span>{t.mobileLabel}</span><i/></div><h3>Hey Alex,<br/><span>ta squad t’attend.</span></h3>
+          <div className={styles.mobileSquad}><div className={styles.mobileSquadTop}><span>RR</span><div><strong>Ranked Rush</strong><small>4 mates en ligne</small></div><b><Icon name="headset"/></b></div><div className={styles.waveform}>{Array.from({length:22}).map((_,index)=><i key={index}/>)}</div><button>{t.voice}<span><Icon name="arrow"/></span></button></div><div className={styles.mobileTabs}><Icon name="radar"/><Icon name="people"/><Icon name="message"/><Icon name="heart"/></div>
         </div>
-      </section>
+        <div className={styles.floatingNotification}><span><Icon name="bolt"/></span><div><small>PLAY NOW</small><strong>{t.found}</strong></div><i>maintenant</i></div>
+      </div>
+    </section>
 
-      <section className={styles.experienceSection} aria-labelledby="experience-title">
-        <div className={styles.experienceCopy}>
-          <p className={styles.eyebrow}>{t.experienceKicker}</p>
-          <h2 id="experience-title">
-            {t.experienceTitleBefore}<span>{t.experienceTitleAccent}</span>
-          </h2>
-          <p>{t.experienceText}</p>
+    <section id="features" className={styles.featuresSection}><div className={styles.featuresHeader}><p className={styles.kicker}>{t.featureKicker}</p><h2>{t.featureBefore}<br/><span>{t.featureAccent}</span></h2><p>{t.featureText}</p></div>
+      <div className={styles.bentoGrid}>
+        <article className={`${styles.bentoCard} ${styles.smartCard}`}><div className={styles.cardIcon}><Icon name="radar"/></div><span className={styles.cardIndex}>01</span><h3>{t.smartTitle}</h3><p>{t.smartText}</p><div className={styles.dnaVisual}><div><span>PLAYSTYLE</span><strong>Competitive</strong></div><div><span>VIBE</span><strong>Chill + focus</strong></div><div><span>SCHEDULE</span><strong>Evenings</strong></div><i>94%</i></div></article>
+        <article className={`${styles.bentoCard} ${styles.squadsCard}`}><div className={styles.cardIcon}><Icon name="people"/></div><span className={styles.cardIndex}>02</span><h3>{t.squadTitle}</h3><p>{t.squadText}</p><div className={styles.squadVisual}><div><i>AX</i><i>NO</i><i>KY</i><i>+2</i></div><span><Icon name="headset"/>LIVE</span></div></article>
+        <article className={`${styles.bentoCard} ${styles.mobileCard}`}><div className={styles.cardIcon}><Icon name="message"/></div><span className={styles.cardIndex}>03</span><h3>{t.everywhereTitle}</h3><p>{t.everywhereText}</p><div className={styles.messageVisual}><span>On lance à 21h30 ?</span><span>Présent 👊</span><i>•••</i></div></article>
+        <article className={`${styles.bentoCard} ${styles.safeCard}`}><div className={styles.cardIcon}><Icon name="shield"/></div><span className={styles.cardIndex}>04</span><h3>{t.safeTitle}</h3><p>{t.safeText}</p><div className={styles.safeVisual}><span><Icon name="check"/>Profil visible</span><span><Icon name="check"/>Invitations filtrées</span></div></article>
+      </div>
+    </section>
 
-          <div className={styles.platforms}>
-            <span><i aria-hidden="true">▣</i>{t.platformPc}</span>
-            <span><i aria-hidden="true">◇</i>{t.platformMobile}</span>
-          </div>
-          <strong className={styles.sharedProfile}>{t.platformShared}</strong>
-        </div>
+    <section id="how" className={styles.stepsSection}><div className={styles.stepsIntro}><p className={styles.kicker}>{t.stepsKicker}</p><h2>{t.stepsBefore}<br/><span>{t.stepsAccent}</span></h2></div><div className={styles.stepsList}>{t.steps.map(([number,title,text],index)=><article key={number}><span>{number}</span><div className={styles.stepIcon}><Icon name={(["sparkles","radar","headset"] as IconName[])[index]}/></div><div><h3>{title}</h3><p>{text}</p></div>{index < 2 && <i/>}</article>)}</div></section>
 
-        <div className={styles.productScene} aria-label="Aperçu de l’expérience GameMate">
-          <div className={styles.sceneGlow} />
-          <div className={styles.orbitRing} />
+    <section className={styles.ctaSection}><div className={styles.ctaGrid}/><div className={styles.ctaOrb}><div><Image src="/gamemate-mark-transparent.png" alt="" width={150} height={150}/></div><i/><i/></div><div className={styles.ctaContent}><p className={styles.kicker}>{t.ctaKicker}</p><h2>{t.ctaBefore}<br/><span>{t.ctaAccent}</span></h2><p>{t.ctaText}</p><div className={styles.ctaActions}><a href={stats.downloadUrl || FALLBACK_DOWNLOAD} className={styles.primaryButton}><Icon name="windows"/>{t.download}<span><Icon name="download"/></span></a><Link href="/signup" className={styles.textButton}>{t.signup}<Icon name="arrow"/></Link></div><small>{t.version} {stats.latestVersion}{publishedLabel ? ` · ${t.released} ${publishedLabel}` : ""}</small></div></section>
 
-          <div className={styles.desktopFrame}>
-            <div className={styles.windowBar}>
-              <span /><span /><span />
-              <b>GAMEMATE</b>
-            </div>
-            <div className={styles.appShell}>
-              <aside className={styles.appRail}>
-                <span className={styles.miniLogo}>GM</span>
-                <i className={styles.railActive}>⌂</i>
-                <i>◎</i><i>◇</i><i>◈</i>
-              </aside>
-              <div className={styles.appContent}>
-                <div className={styles.appHeading}>
-                  <div><small>{t.ready}</small><strong>Play Now</strong></div>
-                  <span className={styles.onlinePill}>● 2 online</span>
-                </div>
-                <div className={styles.matchCard}>
-                  <div className={styles.matchAvatar}>LX</div>
-                  <div className={styles.matchIdentity}>
-                    <strong>Lex<span>#5693</span></strong>
-                    <small>Competitive · FR</small>
-                  </div>
-                  <b>{t.compatibility}</b>
-                </div>
-                <div className={styles.squadRow}>
-                  <div><small>{t.squadLabel}</small><strong>Ranked Rush</strong></div>
-                  <div className={styles.avatarStack}><span>A</span><span>N</span><span>K</span><em>+2</em></div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className={styles.phoneFrame}>
-            <span className={styles.phoneNotch} />
-            <div className={styles.phoneHeader}><span className={styles.miniLogo}>GM</span><i>●</i></div>
-            <small>{t.ready}</small>
-            <h3>Good evening,<br /><span>Alex.</span></h3>
-            <div className={styles.mobileMatch}>
-              <div className={styles.matchAvatar}>MJ</div>
-              <div><strong>Maya</strong><small>Squad ouverte</small></div>
-              <b>92%</b>
-            </div>
-            <div className={styles.voiceCard}>
-              <span>◉</span>
-              <div><strong>{t.voiceLive}</strong><small>Ranked Rush · 4 mates</small></div>
-              <i>•••</i>
-            </div>
-            <div className={styles.mobileNav}><i>⌂</i><i>◎</i><i>◇</i><i>◈</i></div>
-          </div>
-
-          <div className={styles.floatingChip}><span>⚡</span><b>Match found</b><small>0.8 sec</small></div>
-        </div>
-      </section>
-
-      <section id="features" className={styles.featuresSection}>
-        <div className={styles.featuresIntro}>
-          <p className={styles.eyebrow}>{t.howItWorks}</p>
-          <h2>{t.featuresBefore}<span>{t.featuresAccent}</span></h2>
-          <p>{t.featuresText}</p>
-        </div>
-
-        <div className={styles.featureGrid}>
-          {t.features.map((feature, index) => (
-            <article key={feature.title} className={styles.featureCard}>
-              <div className={styles.featureTopline}>
-                <span className={styles.featureNumber}>0{index + 1}</span>
-                <span className={styles.featureIcon}>{feature.icon}</span>
-              </div>
-              <h3>{feature.title}</h3>
-              <p>{feature.text}</p>
-            </article>
-          ))}
-        </div>
-      </section>
-
-      <section id="download" className={styles.downloadSection}>
-        <div className={styles.downloadGlow} />
-        <div className={styles.downloadInner}>
-          <p className={styles.eyebrow}>GAME ON</p>
-          <h2>{t.downloadBefore}<span>{t.downloadAccent}</span></h2>
-          <p>{t.downloadText}</p>
-
-          <div className={styles.downloadActions}>
-            <a href={stats.downloadUrl || FALLBACK_DOWNLOAD} className={styles.primaryButton}>
-              {t.downloadWindows}
-            </a>
-            <Link href="/signup" className={styles.secondaryButton}>{t.signup}</Link>
-          </div>
-
-          <p className={styles.downloadNote}>
-            {t.windows} · {t.latest} {stats.latestVersion}
-            {publishedLabel ? ` · ${t.released} ${publishedLabel}` : ""}
-          </p>
-        </div>
-      </section>
-
-      <footer className={styles.footer}>
-        <div className={styles.footerBrand}>
-          <Image className={styles.brandMark} src="/gamemate-mark-transparent.png" alt="" width={44} height={44} />
-          <strong>Game<span>Mate</span></strong>
-        </div>
-
-        <div className={styles.footerLinks}>
-          <Link href="/login">{t.login}</Link>
-          <Link href="/signup">{t.signup}</Link>
-          <a href="#features">{t.footerFeatures}</a>
-          <a href="#download">{t.footerDownload}</a>
-        </div>
-
-        <p>Good players. Better people.</p>
-      </footer>
-    </main>
-  );
+    <footer className={styles.footer}><div><Link href="/" className={styles.brand}><span className={styles.brandMark}><Image src="/gamemate-mark-transparent.png" alt="" width={46} height={46}/></span><span className={styles.wordmark}>Game<b>Mate</b></span></Link><p>{t.footerLine}</p></div><div className={styles.footerLinks}><a href="#product">{t.navProduct}</a><a href="#features">{t.navFeatures}</a><a href="#how">{t.navHow}</a><Link href="/login">{t.login}</Link></div><small>© {new Date().getFullYear()} GameMate</small></footer>
+  </main>;
 }
