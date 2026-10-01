@@ -15,9 +15,10 @@ import SettingsPage, { type AppearanceSettings } from "./pages/SettingsPage";
 import SupportPage from "./pages/SupportPage";
 import NotificationCenter from "./components/NotificationCenter";
 import type { VoiceSessionSnapshot } from "./components/SquadVoiceRoom";
-import DirectCallManager from "./components/DirectCallManager";
+import DirectCallManager, { type DirectVoiceOverlaySnapshot } from "./components/DirectCallManager";
 import HomeDashboard from "./components/HomeDashboard";
 import UpdateCenter from "./components/UpdateCenter";
+import VoiceOverlayManager from "./components/VoiceOverlayManager";
 import { Icon, type IconName } from "./components/Icon";
 import { presenceLabel, presenceStorageKeys, readPresenceCustomStatus, readPresenceStatus, type OwnPresenceStatus } from "./lib/presence";
 import { playNavigationSound } from "./lib/audio";
@@ -201,6 +202,7 @@ function App() {
   const [windowActive, setWindowActive] = useState(true);
   const [moderationState, setModerationState] = useState<ModerationState>(EMPTY_MODERATION_STATE);
   const [voiceSession, setVoiceSession] = useState<VoiceSessionSnapshot | null>(null);
+  const [directVoiceSession, setDirectVoiceSession] = useState<DirectVoiceOverlaySnapshot | null>(null);
   const [showQuickAccess, setShowQuickAccess] = useState(false);
   const [myPresenceStatus, setMyPresenceStatus] = useState<OwnPresenceStatus>(readPresenceStatus);
   const [myPresenceText, setMyPresenceText] = useState(readPresenceCustomStatus);
@@ -1223,11 +1225,16 @@ function App() {
         key="gamemate-global-direct-call-host"
         session={session}
         squadVoiceActive={Boolean(voiceSession)}
+        currentDisplayName={displayName}
+        currentAvatarUrl={profile?.avatar_url ?? null}
+        onOverlayStateChange={setDirectVoiceSession}
         onOpenMessages={(userId) => {
           setMessageTargetUserId(userId);
           navigateTo("messages");
         }}
       />
+
+      <VoiceOverlayManager squadSession={voiceSession} directSession={directVoiceSession} />
 
       {session && moderationState.restricted && blockingSanction && section !== "support" && (
         <div className="gm-sanction-lock">

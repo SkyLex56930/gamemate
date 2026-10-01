@@ -3,6 +3,8 @@ use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::thread;
+use std::time::Duration;
 
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
@@ -482,13 +484,19 @@ async fn update_companion() -> Result<CompanionStatus, String> {
 }
 
 #[tauri::command]
-fn launch_companion() -> Result<String, String> {
+fn launch_companion(app: tauri::AppHandle) -> Result<String, String> {
     let executable = find_companion_executable().ok_or_else(|| {
         "GameMate Companion n’est pas installé. Utilise d’abord « Installer GameMate »."
             .to_string()
     })?;
 
-    Command::new(&executable)
+    let launcher_path = env::current_exe().ok();
+    let mut command = Command::new(&executable);
+    if let Some(path) = launcher_path {
+        command.env("GAMEMATE_LAUNCHER_PATH", path);
+    }
+    command.env("GAMEMATE_LAUNCHER_PID", std::process::id().to_string());
+    command
         .spawn()
         .map_err(|error| {
             format!(
@@ -496,6 +504,10 @@ fn launch_companion() -> Result<String, String> {
             )
         })?;
 
+    thread::spawn(move || {
+        thread::sleep(Duration::from_millis(350));
+        app.exit(0);
+    });
     Ok("GameMate Companion est en cours de lancement.".to_string())
 }
 

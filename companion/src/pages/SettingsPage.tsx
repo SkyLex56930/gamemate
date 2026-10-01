@@ -5,6 +5,7 @@ import { playMessageSendSound, playNotificationSound, soundPreferenceKeys } from
 import { audioDevicePreferenceKeys } from "../lib/mediaDevices";
 import { desktopNotificationPreferenceKeys, prepareNativeNotifications } from "../lib/nativeNotifications";
 import AudioDeviceSettings from "../components/AudioDeviceSettings";
+import VoiceOverlaySettings from "../components/VoiceOverlaySettings";
 import { Icon, type IconName } from "../components/Icon";
 import {
   presenceDescription,
@@ -99,6 +100,10 @@ const LOCAL_SETTING_KEYS = [
   presenceStorageKeys.activityGameId,
   presenceStorageKeys.activityText,
   "gamemate-enter-to-send",
+  "gamemate-voice-overlay-enabled",
+  "gamemate-voice-mute-shortcut",
+  "gamemate-voice-deafen-shortcut",
+  "gamemate-voice-overlay-shortcut",
 ];
 
 function readBool(key: string, fallback = true) {
@@ -444,6 +449,9 @@ export default function SettingsPage({
                 <Toggle title="Aperçu des messages" description="Affiche le texte des messages dans les notifications Windows." checked={desktopMessagePreview} disabled={!desktopNotifications} onChange={(value) => setSound(desktopNotificationPreferenceKeys.messagePreview, value, setDesktopMessagePreview)} />
                 <Toggle title="Confirmation d’envoi" description="Jouée après l’envoi réussi d’un message." checked={messageSendSound} disabled={!soundEnabled} actionLabel="Tester" onAction={playMessageSendSound} onChange={(value) => setSound(soundPreferenceKeys.send, value, setMessageSendSound)} />
                 <Toggle title="Badges visuels" description="Complète les sons avec les compteurs dans l’interface." checked={notificationBadges} onChange={onNotificationBadgesChange} />
+              </SettingsPanel>
+              <SettingsPanel index="04" kicker="EN JEU" title="Overlay vocal et raccourcis" description="Garde ton équipe visible et pilote ton micro sans quitter le jeu.">
+                <VoiceOverlaySettings onNotice={announce} />
               </SettingsPanel>
             </>
           )}

@@ -9,6 +9,7 @@ import {
 } from "../lib/mediaDevices";
 import { createRtcConfig, supportsVoiceCalls } from "../lib/webrtc";
 import { Icon } from "./Icon";
+import type { VoiceOverlayParticipant } from "../lib/voiceOverlay";
 
 export type SquadMember = {
   user_id: string;
@@ -55,6 +56,7 @@ export type VoiceSessionSnapshot = {
   deafened: boolean;
   speaking: boolean;
   participantCount: number;
+  participants: VoiceOverlayParticipant[];
 };
 
 type VoiceCommand = {
@@ -464,8 +466,16 @@ export default function SquadVoiceRoom({
       deafened,
       speaking: localSpeaking,
       participantCount: participants.length,
+      participants: participants.map((participant) => ({
+        id: participant.user_id,
+        name: participant.display_name,
+        avatarUrl: participant.avatar_url,
+        muted: participant.muted,
+        speaking: participant.user_id === currentUserId ? localSpeaking : participant.speaking,
+        self: participant.user_id === currentUserId,
+      })),
     });
-  }, [channelId, channelName, connecting, deafened, joined, localSpeaking, muted, onStateChange, participants.length, squadId]);
+  }, [channelId, channelName, connecting, currentUserId, deafened, joined, localSpeaking, muted, onStateChange, participants, squadId]);
 
   useEffect(() => {
     const handleVoiceCommand = (event: Event) => {
@@ -488,7 +498,11 @@ export default function SquadVoiceRoom({
     };
 
     window.addEventListener("gamemate:voice-command", handleVoiceCommand);
-    return () => window.removeEventListener("gamemate:voice-command", handleVoiceCommand);
+    window.addEventListener("gamemate:global-voice-command", handleVoiceCommand);
+    return () => {
+      window.removeEventListener("gamemate:voice-command", handleVoiceCommand);
+      window.removeEventListener("gamemate:global-voice-command", handleVoiceCommand);
+    };
   }, [applyVoiceControls, channelId, joined, leaveVoice]);
 function toggleMute() {
     applyVoiceControls(!mutedRef.current, deafenedRef.current);

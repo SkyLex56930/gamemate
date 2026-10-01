@@ -16,7 +16,10 @@ import {
   supportsVoiceCalls,
 } from "../lib/webrtc";
 import { Icon } from "./Icon";
+import type { VoiceOverlaySnapshot } from "../lib/voiceOverlay";
 import "./DirectCallManager.css";
+
+export type DirectVoiceOverlaySnapshot = VoiceOverlaySnapshot;
 
 type DirectCallStatus = "ringing" | "active" | "declined" | "missed" | "cancelled" | "ended";
 type MediaMode = "audio" | "video";
@@ -65,9 +68,12 @@ type Props = {
   session: Session | null;
   squadVoiceActive: boolean;
   onOpenMessages: (userId: string) => void;
+  currentDisplayName: string;
+  currentAvatarUrl: string | null;
+  onOverlayStateChange?: (snapshot: DirectVoiceOverlaySnapshot | null) => void;
 };
 
-export default function DirectCallManager({ session, squadVoiceActive, onOpenMessages }: Props) {
+export default function DirectCallManager({ session, squadVoiceActive, onOpenMessages, currentDisplayName, currentAvatarUrl, onOverlayStateChange }: Props) {
   const [call, setCall] = useState<DirectCall | null>(null);
   const [muted, setMuted] = useState(false);
   const [deafened, setDeafened] = useState(false);
@@ -77,6 +83,7 @@ export default function DirectCallManager({ session, squadVoiceActive, onOpenMes
   const [remoteCameraEnabled, setRemoteCameraEnabled] = useState(false);
   const [remoteScreenSharing, setRemoteScreenSharing] = useState(false);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
+  const [localAudioStream, setLocalAudioStream] = useState<MediaStream | null>(null);
   const [localPreviewStream, setLocalPreviewStream] = useState<MediaStream | null>(null);
   const [connectionState, setConnectionState] = useState<RTCPeerConnectionState | "waiting">("waiting");
   const [elapsed, setElapsed] = useState(0);
@@ -157,6 +164,7 @@ export default function DirectCallManager({ session, squadVoiceActive, onOpenMes
     setRemoteCameraEnabled(false);
     setRemoteScreenSharing(false);
     setRemoteStream(null);
+    setLocalAudioStream(null);
     setLocalPreviewStream(null);
     setConnectionState("waiting");
     setElapsed(0);
@@ -230,6 +238,7 @@ export default function DirectCallManager({ session, squadVoiceActive, onOpenMes
       stream.addTrack(track);
     });
     localStreamRef.current = stream;
+    setLocalAudioStream(new MediaStream(stream.getAudioTracks()));
     return stream;
   }, []);
 
@@ -632,6 +641,50 @@ export default function DirectCallManager({ session, squadVoiceActive, onOpenMes
     setDeafened(next);
   }, []);
 
+  const localSpeaking = useSpeakingActivity(localAudioStream, Boolean(call?.status === "active" && !muted));
+  const remoteSpeaking = useSpeakingActivity(remoteStream, Boolean(call?.status === "active" && !remoteMuted));
+
+  useEffect(() => {
+    if (!call || call.status !== "active") {
+      onOverlayStateChange?.(null);
+      return;
+    }
+
+    onOverlayStateChange?.({
+      kind: "direct",
+      title: `Appel avec ${otherName}`,
+      participants: [
+        {
+          id: userId ?? "self",
+          name: currentDisplayName,
+          avatarUrl: currentAvatarUrl,
+          muted,
+          speaking: localSpeaking,
+          self: true,
+        },
+        {
+          id: call.other_user_id,
+          name: otherName,
+          avatarUrl: call.other_avatar_url,
+          muted: remoteMuted,
+          speaking: remoteSpeaking,
+          self: false,
+        },
+      ],
+    });
+  }, [call, currentAvatarUrl, currentDisplayName, localSpeaking, muted, onOverlayStateChange, otherName, remoteMuted, remoteSpeaking, userId]);
+
+  useEffect(() => {
+    const handleGlobalVoiceCommand = (event: Event) => {
+      if (callRef.current?.status !== "active") return;
+      const action = (event as CustomEvent<{ action?: string }>).detail?.action;
+      if (action === "toggle-mute") toggleMute();
+      if (action === "toggle-deafen") toggleDeafen();
+    };
+    window.addEventListener("gamemate:global-voice-command", handleGlobalVoiceCommand);
+    return () => window.removeEventListener("gamemate:global-voice-command", handleGlobalVoiceCommand);
+  }, [toggleDeafen, toggleMute]);
+
   const toggleCamera = useCallback(async () => {
     if (mediaBusy) return;
     setMediaBusy(true);
@@ -929,6 +982,54 @@ export default function DirectCallManager({ session, squadVoiceActive, onOpenMes
     {feedbackLayer}
     </>
   );
+}
+
+function useSpeakingActivity(stream: MediaStream | null, enabled: boolean) {
+  const [speaking, setSpeaking] = useState(false);
+
+  useEffect(() => {
+    if (!stream || !enabled || stream.getAudioTracks().length === 0) {
+      setSpeaking(false);
+      return undefined;
+    }
+
+    const context = new AudioContext();
+    const analyser = context.createAnalyser();
+    analyser.fftSize = 512;
+    analyser.smoothingTimeConstant = 0.68;
+    const source = context.createMediaStreamSource(new MediaStream(stream.getAudioTracks()));
+    source.connect(analyser);
+    const samples = new Uint8Array(analyser.fftSize);
+    let frame = 0;
+    let lastSpeaking = false;
+    let lastChange = 0;
+
+    const measure = (timestamp: number) => {
+      analyser.getByteTimeDomainData(samples);
+      let energy = 0;
+      for (const sample of samples) {
+        const normalized = (sample - 128) / 128;
+        energy += normalized * normalized;
+      }
+      const nextSpeaking = Math.sqrt(energy / samples.length) > 0.035;
+      if (nextSpeaking !== lastSpeaking && timestamp - lastChange > 220) {
+        lastSpeaking = nextSpeaking;
+        lastChange = timestamp;
+        setSpeaking(nextSpeaking);
+      }
+      frame = requestAnimationFrame(measure);
+    };
+    frame = requestAnimationFrame(measure);
+
+    return () => {
+      cancelAnimationFrame(frame);
+      source.disconnect();
+      void context.close();
+      setSpeaking(false);
+    };
+  }, [enabled, stream]);
+
+  return speaking;
 }
 
 function DirectRemoteMedia({ stream, muted, video }: { stream: MediaStream | null; muted: boolean; video: boolean }) {

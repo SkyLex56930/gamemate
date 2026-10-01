@@ -1,11 +1,15 @@
 use serde::Serialize;
+use serde_json::Value;
 use std::{env, fs};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::{atomic::{AtomicBool, Ordering}, Mutex};
+use std::thread;
+use std::time::Duration;
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Manager, WindowEvent,
+    AppHandle, Emitter, Manager, RunEvent, State, WebviewUrl, WebviewWindowBuilder, WindowEvent,
 };
 
 #[cfg(target_os = "windows")]
@@ -29,6 +33,123 @@ struct CompanionUpdateStatus {
 struct LatestRelease {
     version: String,
     download_url: String,
+}
+
+#[derive(Default)]
+struct VoiceOverlayState(Mutex<Option<Value>>);
+
+struct LifecycleState {
+    relaunch_launcher: AtomicBool,
+}
+
+impl Default for LifecycleState {
+    fn default() -> Self {
+        Self { relaunch_launcher: AtomicBool::new(true) }
+    }
+}
+
+fn possible_launcher_paths() -> Vec<PathBuf> {
+    let mut paths = Vec::new();
+    if let Some(path) = env::var_os("GAMEMATE_LAUNCHER_PATH") {
+        paths.push(PathBuf::from(path));
+    }
+    if let Some(local_app_data) = env::var_os("LOCALAPPDATA") {
+        let programs = PathBuf::from(local_app_data).join("Programs");
+        paths.push(programs.join("launcher").join("launcher.exe"));
+        paths.push(programs.join("GameMate Launcher").join("launcher.exe"));
+        paths.push(programs.join("GameMate Launcher").join("GameMate Launcher.exe"));
+    }
+    if let Some(program_files) = env::var_os("PROGRAMFILES") {
+        let root = PathBuf::from(program_files);
+        paths.push(root.join("launcher").join("launcher.exe"));
+        paths.push(root.join("GameMate Launcher").join("launcher.exe"));
+    }
+    paths
+}
+
+fn find_launcher_executable() -> Option<PathBuf> {
+    possible_launcher_paths().into_iter().find(|path| path.is_file())
+}
+
+#[cfg(target_os = "windows")]
+fn stop_running_launcher(path: &Path) {
+    let target = path.to_string_lossy().replace('\'', "''");
+    let script = format!(
+        "$target=[System.IO.Path]::GetFullPath('{}');\
+         Get-CimInstance Win32_Process -Filter \"Name='launcher.exe'\" |\
+         Where-Object {{ $_.ExecutablePath -and [System.IO.Path]::GetFullPath($_.ExecutablePath) -eq $target }} |\
+         ForEach-Object {{ Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }}",
+        target
+    );
+    let _ = Command::new("powershell.exe")
+        .args(["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", &script])
+        .creation_flags(CREATE_NO_WINDOW)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status();
+}
+
+#[cfg(not(target_os = "windows"))]
+fn stop_running_launcher(_path: &Path) {}
+
+fn reopen_launcher() {
+    if let Some(path) = find_launcher_executable() {
+        let _ = Command::new(path).spawn();
+    }
+}
+
+#[tauri::command]
+fn get_voice_overlay_state(state: State<'_, VoiceOverlayState>) -> Option<Value> {
+    state.0.lock().ok().and_then(|snapshot| snapshot.clone())
+}
+
+#[tauri::command]
+fn sync_voice_overlay(
+    app: AppHandle,
+    state: State<'_, VoiceOverlayState>,
+    snapshot: Option<Value>,
+) -> Result<(), String> {
+    if let Ok(mut current) = state.0.lock() {
+        *current = snapshot.clone();
+    }
+
+    let Some(snapshot) = snapshot else {
+        if let Some(window) = app.get_webview_window("voice-overlay") {
+            window.hide().map_err(|error| error.to_string())?;
+        }
+        return Ok(());
+    };
+
+    let window = if let Some(window) = app.get_webview_window("voice-overlay") {
+        window.show().map_err(|error| error.to_string())?;
+        window
+    } else {
+        let window = WebviewWindowBuilder::new(
+            &app,
+            "voice-overlay",
+            WebviewUrl::App("index.html?overlay=voice".into()),
+        )
+        .title("GameMate Voice Overlay")
+        .inner_size(370.0, 430.0)
+        .position(18.0, 18.0)
+        .decorations(false)
+        .transparent(true)
+        .always_on_top(true)
+        .resizable(false)
+        .skip_taskbar(true)
+        .focusable(false)
+        .shadow(false)
+        .build()
+        .map_err(|error| format!("Impossible de créer l’overlay vocal : {error}"))?;
+        let _ = window.set_ignore_cursor_events(true);
+        window
+    };
+
+    window
+        .emit("voice-overlay:update", snapshot)
+        .map_err(|error| format!("Impossible d’actualiser l’overlay vocal : {error}"))?;
+    Ok(())
 }
 
 fn numeric_version(version: &str) -> Vec<u64> {
@@ -61,10 +182,10 @@ mod update_tests {
 
     #[test]
     fn compares_release_versions_numerically() {
-        assert!(is_newer_version("v1.0.15", "1.0.14"));
+        assert!(is_newer_version("v1.0.16", "1.0.15"));
         assert!(is_newer_version("2.0.0", "1.99.99"));
-        assert!(!is_newer_version("v1.0.14", "1.0.14"));
-        assert!(!is_newer_version("1.0.9", "1.0.14"));
+        assert!(!is_newer_version("v1.0.15", "1.0.15"));
+        assert!(!is_newer_version("1.0.9", "1.0.15"));
     }
 }
 
@@ -232,7 +353,7 @@ async fn check_companion_update() -> Result<CompanionUpdateStatus, String> {
 }
 
 #[tauri::command]
-async fn install_companion_update(app: AppHandle) -> Result<(), String> {
+async fn install_companion_update(app: AppHandle, lifecycle: State<'_, LifecycleState>) -> Result<(), String> {
     let installer_path = tauri::async_runtime::spawn_blocking(|| {
         let release = latest_release()?;
         let current_version = env!("CARGO_PKG_VERSION");
@@ -256,6 +377,7 @@ async fn install_companion_update(app: AppHandle) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     launch_update_installer(&installer_path)?;
 
+    lifecycle.relaunch_launcher.store(false, Ordering::SeqCst);
     app.exit(0);
     Ok(())
 }
@@ -265,12 +387,26 @@ fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
 }
 
+#[tauri::command]
+fn quit_to_launcher(app: AppHandle) {
+    app.exit(0);
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
+        .manage(VoiceOverlayState::default())
+        .manage(LifecycleState::default())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
+            if let Some(launcher_path) = find_launcher_executable() {
+                thread::spawn(move || {
+                    thread::sleep(Duration::from_millis(900));
+                    stop_running_launcher(&launcher_path);
+                });
+            }
             let open_item = MenuItem::with_id(app, "open", "Ouvrir GameMate", true, None::<&str>)?;
             let quit_item = MenuItem::with_id(app, "quit", "Quitter GameMate", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&open_item, &quit_item])?;
@@ -314,14 +450,30 @@ pub fn run() {
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
-                let _ = window.hide();
+                if window.label() == "voice-overlay" {
+                    let _ = window.hide();
+                } else {
+                    window.app_handle().exit(0);
+                }
             }
         })
         .invoke_handler(tauri::generate_handler![
             greet,
             check_companion_update,
-            install_companion_update
+            install_companion_update,
+            get_voice_overlay_state,
+            sync_voice_overlay,
+            quit_to_launcher
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    app.run(|app_handle, event| {
+        if let RunEvent::Exit = event {
+            let lifecycle = app_handle.state::<LifecycleState>();
+            if lifecycle.relaunch_launcher.load(Ordering::SeqCst) {
+                reopen_launcher();
+            }
+        }
+    });
 }
