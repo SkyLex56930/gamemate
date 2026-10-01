@@ -17,6 +17,7 @@ import NotificationCenter from "./components/NotificationCenter";
 import type { VoiceSessionSnapshot } from "./components/SquadVoiceRoom";
 import DirectCallManager from "./components/DirectCallManager";
 import HomeDashboard from "./components/HomeDashboard";
+import UpdateCenter from "./components/UpdateCenter";
 import { Icon, type IconName } from "./components/Icon";
 import { presenceLabel, presenceStorageKeys, readPresenceCustomStatus, readPresenceStatus, type OwnPresenceStatus } from "./lib/presence";
 import { playNavigationSound } from "./lib/audio";
@@ -972,6 +973,8 @@ function App() {
             </button>
 
             <div className="gm-top-actions">
+              <UpdateCenter />
+
               <NotificationCenter
                 session={session}
                 totalCount={pendingFriendRequests + unreadMessages}
