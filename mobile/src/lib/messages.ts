@@ -16,6 +16,17 @@ export type Message = {
   read_at: string | null;
 };
 
+export type VoiceMessagePayload = {
+  version: 1;
+  path: string;
+  duration: number;
+  mime: string;
+};
+
+export const VOICE_MESSAGE_BUCKET = "voice-messages";
+export const VOICE_MESSAGE_MARKER = "\n[gm-voice:v1]";
+export const MAX_VOICE_DURATION_SECONDS = 90;
+
 export type ChatProfile = {
   id: string;
   username: string | null;
@@ -98,4 +109,26 @@ export async function sendMessage(conversationId: string, body: string): Promise
 
 export function chatName(profile: ChatProfile): string {
   return profile.display_name || profile.username || "Joueur";
+}
+
+export function parseVoiceMessage(body: string): VoiceMessagePayload | null {
+  const markerIndex = body.indexOf(VOICE_MESSAGE_MARKER);
+  if (markerIndex < 0) return null;
+  try {
+    const value = JSON.parse(body.slice(markerIndex + VOICE_MESSAGE_MARKER.length)) as Partial<VoiceMessagePayload>;
+    if (value.version !== 1 || typeof value.path !== "string"
+      || typeof value.duration !== "number" || typeof value.mime !== "string") return null;
+    return value as VoiceMessagePayload;
+  } catch {
+    return null;
+  }
+}
+
+export function messagePreview(body: string): string {
+  return parseVoiceMessage(body) ? "🎙️ Message vocal" : body;
+}
+
+export function formatVoiceDuration(seconds: number): string {
+  const safe = Math.max(0, Math.floor(seconds));
+  return `${Math.floor(safe / 60)}:${String(safe % 60).padStart(2, "0")}`;
 }

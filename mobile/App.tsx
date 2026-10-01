@@ -1,4 +1,4 @@
-﻿import "react-native-gesture-handler";
+import "react-native-gesture-handler";
 
 import { useEffect, useState } from "react";
 import {
@@ -20,6 +20,7 @@ import { AppNavigator } from "./src/navigation/AppNavigator";
 import { MobilePreferencesProvider } from "./src/lib/mobilePreferences";
 import { LoginScreen } from "./src/screens/LoginScreen";
 import { theme } from "./src/theme/theme";
+import { DirectCallsProvider } from "./src/lib/directCalls";
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
@@ -87,7 +88,9 @@ export default function App() {
               <ActivityIndicator size="large" />
             </View>
           ) : session ? (
-            <AppNavigator session={session} />
+            <DirectCallsProvider session={session}>
+              <AppNavigator session={session} />
+            </DirectCallsProvider>
           ) : (
             <SafeAreaView style={styles.root} edges={["bottom"]}>
               <LoginScreen />

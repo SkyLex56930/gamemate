@@ -6,7 +6,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Avatar } from "../components/Avatar";
-import { chatName, getConversations, type ConversationItem } from "../lib/messages";
+import { chatName, getConversations, messagePreview, type ConversationItem } from "../lib/messages";
 import { supabase } from "../lib/supabase";
 import type { MessagesStackParamList } from "../navigation/AppNavigator";
 import { theme } from "../theme/theme";
@@ -84,7 +84,7 @@ export function MessagesScreen({ session, navigation, onUnreadChange }: Props) {
           <View style={styles.line}>
             <Text style={[styles.preview, item.unread > 0 && styles.unreadText,
               preferences.messageSize === "large" && styles.previewLarge]} numberOfLines={1}>
-              {item.lastMessage ? `${item.lastMessage.sender_id === session.user.id ? "Vous : " : ""}${item.lastMessage.body}` : "Commencer la conversation"}
+              {item.lastMessage ? `${item.lastMessage.sender_id === session.user.id ? "Vous : " : ""}${messagePreview(item.lastMessage.body)}` : "Commencer la conversation"}
             </Text>
             {preferences.messageBadges && item.unread > 0 && <View style={[styles.badge, { backgroundColor: palette.primary }]}>
               <Text style={styles.badgeText}>{item.unread}</Text></View>}

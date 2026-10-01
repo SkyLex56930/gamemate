@@ -1,6 +1,6 @@
 {
   "name": "mobile",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "main": "index.ts",
   "dependencies": {
     "@config-plugins/react-native-webrtc": "^15.0.2",
@@ -11,6 +11,8 @@
     "@react-navigation/native-stack": "^7.19.2",
     "@supabase/supabase-js": "^2.117.2",
     "expo": "~57.0.26",
+    "expo-asset": "~57.0.18",
+    "expo-audio": "~57.0.5",
     "expo-constants": "~57.0.20",
     "expo-dev-client": "~57.0.19",
     "expo-device": "~57.0.2",
@@ -40,6 +42,15 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "lint": "expo lint"
+  },
+  "expo": {
+    "doctor": {
+      "reactNativeDirectoryCheck": {
+        "exclude": [
+          "react-native-webrtc"
+        ]
+      }
+    }
   },
   "private": true
 }

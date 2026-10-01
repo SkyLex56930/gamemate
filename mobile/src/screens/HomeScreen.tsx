@@ -4,8 +4,10 @@ import type { Session } from "@supabase/supabase-js";
 import { Ionicons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { LinearGradient } from "expo-linear-gradient";
 import { Avatar } from "../components/Avatar";
-import { chatName, getConversations, type ConversationItem } from "../lib/messages";
+import { BrandLogo } from "../components/BrandLogo";
+import { chatName, getConversations, messagePreview, type ConversationItem } from "../lib/messages";
 import { getMyProfileSummary, type ProfileSummary } from "../lib/profileSummary";
 import { supabase } from "../lib/supabase";
 import { theme } from "../theme/theme";
@@ -13,7 +15,7 @@ import { useAccentPalette, useMobilePreferences } from "../lib/mobilePreferences
 
 type Props = {
   session: Session;
-  onNavigate: (tab: "Messages" | "Amis" | "Mates" | "Squads" | "Profil" | "Boutique") => void;
+  onNavigate: (tab: "Messages" | "Reseau" | "Squads" | "Profil" | "Boutique") => void;
   onOpenConversation: (item: ConversationItem) => void;
   onUnreadChange: (count: number) => void;
   onNotifications: () => void;
@@ -70,11 +72,23 @@ export function HomeScreen({ session, onNavigate, onOpenConversation, onUnreadCh
   return <View style={styles.root}>
     <ScrollView contentContainerStyle={[styles.page, { paddingBottom: insets.bottom + 110 }]}
       showsVerticalScrollIndicator={false}>
+      <View style={styles.topbar}>
+        <View style={styles.brandLine}><BrandLogo variant="mark" style={styles.brandMark} />
+          <View><Text style={styles.brandName}>GameMate</Text><Text style={styles.brandCaption}>TON RÉSEAU GAMING</Text></View></View>
+        <Pressable onPress={onNotifications} style={styles.notificationButton} accessibilityLabel="Voir les notifications">
+          <Ionicons name="notifications-outline" size={21} color={theme.colors.text} />
+          <View style={[styles.liveDot, { backgroundColor: palette.secondary }]} />
+        </Pressable>
+      </View>
+      <View style={styles.welcome}><Text style={styles.welcomeKicker}>READY UP</Text>
+        <Text style={styles.welcomeTitle}>Retrouve ta squad.{"\n"}<Text style={{ color: palette.light }}>Lance la prochaine game.</Text></Text>
+      </View>
       {profileLoading && !summary ? <ActivityIndicator style={styles.loading} color={palette.primary} /> :
         profileError && !summary ? <Pressable style={styles.retry} onPress={() => void loadProfile()}>
           <Text style={styles.retryText}>Impossible de charger ton profil. Appuie pour réessayer.</Text>
         </Pressable> :
-        summary && <View style={styles.profileCard}>
+        summary && <LinearGradient colors={["rgba(10,33,62,0.98)", "rgba(17,20,58,0.98)", "rgba(40,15,61,0.94)"]}
+          start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.profileCard}>
           <View style={styles.identity}>
             <Avatar name={name} url={profile?.avatar_url} size={68} />
             <View style={styles.identityText}>
@@ -125,7 +139,7 @@ export function HomeScreen({ session, onNavigate, onOpenConversation, onUnreadCh
             <Text style={[styles.profileLinkText, { color: palette.light }]}>Voir mon profil</Text>
             <Ionicons name="arrow-forward" size={17} color={palette.light} />
           </Pressable>
-        </View>}
+        </LinearGradient>}
 
       <Pressable onPress={onNotifications} style={styles.notificationsLink} accessibilityRole="button">
         <Ionicons name="notifications-outline" size={20} color={palette.secondary} />
@@ -150,7 +164,7 @@ export function HomeScreen({ session, onNavigate, onOpenConversation, onUnreadCh
           </View>
           <View style={styles.conversationBottom}>
             <Text numberOfLines={1} style={[styles.preview, preferences.messageSize === "large" && styles.previewLarge]}>
-              {item.lastMessage?.body ?? "Commencer la conversation"}
+              {item.lastMessage ? messagePreview(item.lastMessage.body) : "Commencer la conversation"}
             </Text>
             {preferences.messageBadges && item.unread > 0 && <View style={[styles.unread, { backgroundColor: palette.primary }]}>
               <Text style={styles.unreadText}>{item.unread}</Text>
@@ -159,7 +173,7 @@ export function HomeScreen({ session, onNavigate, onOpenConversation, onUnreadCh
         </View>
       </Pressable>) : <Text style={styles.noConversations}>Tes discussions apparaîtront ici.</Text>}
 
-      <Pressable style={styles.discover} onPress={() => onNavigate("Mates")} accessibilityRole="button">
+      <Pressable style={styles.discover} onPress={() => onNavigate("Reseau")} accessibilityRole="button">
         <View style={styles.discoverIcon}>
           <Ionicons name="search-outline" size={21} color={palette.light} />
         </View>
@@ -195,14 +209,26 @@ export function HomeScreen({ session, onNavigate, onOpenConversation, onUnreadCh
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: theme.colors.background },
-  page: { paddingHorizontal: 18, paddingTop: 12 },
+  page: { paddingHorizontal: 18, paddingTop: 10 },
+  topbar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 24 },
+  brandLine: { flexDirection: "row", alignItems: "center", gap: 9 },
+  brandMark: { width: 34, height: 34 },
+  brandName: { color: theme.colors.text, fontSize: 16, fontWeight: "900", letterSpacing: 0.2 },
+  brandCaption: { color: theme.colors.cyan, fontSize: 8, fontWeight: "900", letterSpacing: 1.4 },
+  notificationButton: { width: 43, height: 43, borderRadius: 15, alignItems: "center", justifyContent: "center",
+    borderWidth: 1, borderColor: "rgba(32,220,255,0.24)", backgroundColor: theme.colors.surface },
+  liveDot: { position: "absolute", top: 9, right: 9, width: 7, height: 7, borderRadius: 4, borderWidth: 1, borderColor: theme.colors.surface },
+  welcome: { marginBottom: 20 },
+  welcomeKicker: { color: theme.colors.magenta, fontSize: 10, fontWeight: "900", letterSpacing: 2.2, marginBottom: 7 },
+  welcomeTitle: { color: theme.colors.text, fontSize: 29, lineHeight: 35, fontWeight: "900", letterSpacing: -0.8 },
   notificationsLink: { flexDirection: "row", alignItems: "center", gap: 10, padding: 13,
     marginBottom: 14, borderRadius: 13, backgroundColor: theme.colors.surface },
   notificationsText: { flex: 1, color: theme.colors.text, fontSize: 13, fontWeight: "700" },
   loading: { marginVertical: 65 },
   retry: { padding: 24, borderRadius: 16, backgroundColor: theme.colors.surface },
   retryText: { color: theme.colors.danger },
-  profileCard: { padding: 17, borderRadius: 19, borderWidth: 1, borderColor: theme.colors.border, backgroundColor: theme.colors.surface },
+  profileCard: { padding: 18, borderRadius: 24, borderWidth: 1, borderColor: "rgba(95,190,255,0.28)",
+    shadowColor: theme.colors.primary, shadowOpacity: 0.22, shadowRadius: 22, shadowOffset: { width: 0, height: 10 }, elevation: 8 },
   identity: { flexDirection: "row", alignItems: "center", gap: 12 },
   identityText: { flex: 1, gap: 3 },
   name: { color: theme.colors.text, fontSize: 21, fontWeight: "800" },

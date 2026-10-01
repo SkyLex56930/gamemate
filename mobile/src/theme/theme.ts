@@ -1,21 +1,21 @@
 export const theme = {
   colors: {
-    background: "#020716",
-    surface: "#071527",
-    surfaceSoft: "#0A1A30",
-    surfaceHover: "#102440",
+    background: "#020615",
+    surface: "#07162B",
+    surfaceSoft: "#0B1E39",
+    surfaceHover: "#112B4C",
 
-    border: "#183253",
+    border: "#1A3D66",
 
     text: "#F5F5F5",
     textSoft: "#A9B9D0",
     textMuted: "#7085A4",
 
-    primary: "#7C5CFF",
-    primarySoft: "#B8A7FF",
+    primary: "#765EFF",
+    primarySoft: "#C2B6FF",
 
-    cyan: "#20DCFF",
-    magenta: "#E33BFF",
+    cyan: "#22DDFD",
+    magenta: "#EC4DFF",
 
     success: "#23A55A",
     warning: "#F0B232",

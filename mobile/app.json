@@ -2,7 +2,7 @@
   "expo": {
     "name": "GameMate",
     "slug": "gamemate",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/gamemate-mark-transparent.png",
     "userInterfaceStyle": "dark",
@@ -18,21 +18,31 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#020716",
+          "backgroundColor": "#020615",
           "image": "./assets/gamemate-logo-transparent.png",
           "imageWidth": 260,
           "resizeMode": "contain"
         }
       ],
-      "expo-font"
+      "expo-font",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "GameMate utilise le microphone pour les appels et les messages vocaux.",
+          "enableBackgroundPlayback": false,
+          "enableBackgroundRecording": false
+        }
+      ],
+      "expo-asset"
     ],
     "ios": {
       "supportsTablet": true
     },
     "android": {
       "package": "com.skylex.gamemate",
+      "versionCode": 2,
       "adaptiveIcon": {
-        "backgroundColor": "#020716",
+        "backgroundColor": "#020615",
         "foregroundImage": "./assets/gamemate-mark-transparent.png"
       },
       "softwareKeyboardLayoutMode": "resize",

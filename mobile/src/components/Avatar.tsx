@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Image, StyleSheet, Text, View } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import { theme } from "../theme/theme";
 
 export function Avatar({
@@ -21,7 +22,7 @@ export function Avatar({
       .join("") || "GM";
 
   return (
-    <View
+    <LinearGradient colors={["#245483", "#765EFF", "#EC4DFF"]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
       style={[
         styles.avatar,
         {
@@ -32,7 +33,7 @@ export function Avatar({
         },
       ]}
     >
-      {url && failedUrl !== url ? (
+      <View style={styles.inner}>{url && failedUrl !== url ? (
         <Image source={{ uri: url }} style={styles.photo}
           accessibilityLabel={`Photo de ${name}`} onError={() => setFailedUrl(url)} />
       ) : <Text
@@ -42,21 +43,20 @@ export function Avatar({
         ]}
       >
         {initials}
-      </Text>}
-    </View>
+      </Text>}</View>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
   photo: { width: "100%", height: "100%" },
+  inner: { width: "100%", height: "100%", alignItems: "center", justifyContent: "center", borderRadius: 999,
+    overflow: "hidden", borderWidth: 2, borderColor: "rgba(3,8,23,0.88)" },
   avatar: {
     alignItems: "center",
     justifyContent: "center",
 
-    backgroundColor: "#172744",
-
-    borderWidth: 1,
-    borderColor: "#29476D",
+    padding: 2,
   },
 
   text: {
