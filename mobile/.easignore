@@ -1,0 +1,47 @@
+﻿# Dependencies
+node_modules/
+
+# Expo
+.expo/
+.expo-shared/
+
+# EAS / builds
+.eas/
+build/
+dist/
+
+# Android generated files
+android/.gradle/
+android/app/build/
+android/build/
+
+# iOS generated files
+ios/Pods/
+ios/build/
+
+# Git
+.git/
+.github/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Cache
+.cache/
+.tmp/
+temp/
+tmp/
+
+# Local files
+.DS_Store
+Thumbs.db
+
+# Previous APK / AAB
+*.apk
+*.aab
+
+# Metro
+.metro-health-check*

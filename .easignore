@@ -1,0 +1,45 @@
+# GameMate desktop / web
+companion/
+launcher/
+Admin/
+.next/
+node_modules/
+
+# Backups
+_companion_official_comms_backup/
+_old-companion-src/
+_support_patch_backup/
+_admin_redesign_backup/
+
+# Generated / build files
+dist/
+build/
+coverage/
+.cache/
+.tmp/
+temp/
+tmp/
+
+# Git
+.git/
+
+# Logs
+*.log
+
+# Archives
+*.zip
+*.rar
+*.7z
+*.tar
+*.tar.gz
+
+# APK/AAB already generated
+*.apk
+*.aab
+
+# Inspect output
+eas-inspect/
+
+# Keep the mobile application
+!mobile/
+!mobile/**
